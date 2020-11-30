@@ -25,6 +25,7 @@ type WorkflowNode struct {
 	SourceRef                    string
 	ServiceOfferingSourceRef     string
 	RootServiceOfferingSourceRef string
+	UnifiedJobType               string
 }
 
 type PageContext struct {
@@ -44,6 +45,10 @@ type PageContext struct {
 	dbTransaction                        *gorm.DB
 }
 type PageResponse map[string]interface{}
+
+var surveySpecRe = regexp.MustCompile(`api\/v2\/(job_templates|workflow_job_templates)\/(.*)\/survey_spec/page1.json`)
+
+var objTypeRe = regexp.MustCompile(`\/api\/v2\/(.*)\/`)
 
 func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source.Source, dbTransaction *gorm.DB) *PageContext {
 	pc := PageContext{
@@ -168,8 +173,7 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 	var err error
 	if _, ok := obj["type"]; !ok {
 		// api/v2/job_templates/10/survey_spec
-		re := regexp.MustCompile(`api\/v2\/(job_templates|workflow_job_templates)\/(.*)\/survey_spec/page1.json`)
-		s := re.FindStringSubmatch(url)
+		s := surveySpecRe.FindStringSubmatch(url)
 		if len(s) > 1 {
 			obj["id"] = json.Number(s[2])
 			obj["type"] = "survey_spec"
@@ -197,7 +201,6 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 
 	pc.glog.Infof("Object Type %s Source Ref %s", obj["type"].(string), obj["id"].(json.Number).String())
 
-	err = pc.addIDList(obj, obj["type"].(string))
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":
 		so := &serviceoffering.ServiceOffering{Source: *pc.Source, Tenant: *pc.Tenant}
@@ -235,14 +238,18 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 	case "workflow_job_template_node":
 		son := &serviceofferingnode.ServiceOfferingNode{Source: *pc.Source, Tenant: *pc.Tenant}
 		err = son.CreateOrUpdate(pc.dbTransaction, obj)
-		if err != nil {
+		if err == serviceofferingnode.IgnoreTowerObject {
+			pc.glog.Info("Ignoring Tower Object")
+			return nil
+		} else if err != nil {
 			pc.glog.Errorf("Error adding service offering node %s %v", son.SourceRef, err)
 			return err
 		}
 
 		pc.WorkflowNodes = append(pc.WorkflowNodes, WorkflowNode{SourceRef: son.SourceRef,
 			ServiceOfferingSourceRef:     son.ServiceOfferingSourceRef,
-			RootServiceOfferingSourceRef: son.RootServiceOfferingSourceRef})
+			RootServiceOfferingSourceRef: son.RootServiceOfferingSourceRef,
+			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
 		sc := &servicecredential.ServiceCredential{Source: *pc.Source, Tenant: *pc.Tenant}
 		err = sc.CreateOrUpdate(pc.dbTransaction, obj)
@@ -281,6 +288,7 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 			return err
 		}
 	}
+	err = pc.addIDList(obj, obj["type"].(string))
 	return err
 }
 
@@ -288,8 +296,7 @@ func getObjectType(url string) (string, error) {
 	if strings.HasSuffix(url, "survey_spec/page1.json") {
 		return "survey_spec", nil
 	}
-	re := regexp.MustCompile(`\/api\/v2\/(.*)\/`)
-	s := re.FindStringSubmatch(url)
+	s := objTypeRe.FindStringSubmatch(url)
 	if len(s) < 1 {
 		return "", fmt.Errorf("Could not get object type from url %s", url)
 	}

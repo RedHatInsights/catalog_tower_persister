@@ -20,6 +20,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var inventoriesRe = regexp.MustCompile(`\/api\/v2\/inventories\/(\w)\/`)
+
 type ServiceOffering struct {
 	base.Base
 	base.Tower
@@ -100,11 +102,10 @@ func (so *ServiceOffering) makeObject(attrs map[string]interface{}) error {
 	so.Description = attrs["description"].(string)
 	so.Name = attrs["name"].(string)
 	so.SourceRef = attrs["id"].(json.Number).String()
-	re := regexp.MustCompile(`\/api\/v2\/inventories\/(\w)\/`)
 
 	switch attrs["inventory"].(type) {
 	case string:
-		s := re.FindStringSubmatch(attrs["inventory"].(string))
+		s := inventoriesRe.FindStringSubmatch(attrs["inventory"].(string))
 		if len(s) > 0 {
 			so.ServiceInventorySourceRef = s[1]
 		}

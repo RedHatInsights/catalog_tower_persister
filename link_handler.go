@@ -65,11 +65,9 @@ func (lh *LinkHandler) setSurvey(sourceRef string) error {
 	if result := lh.PC.dbTransaction.Where(&sp).First(&sp); result.Error != nil {
 		return fmt.Errorf("Error finding service plan %s : %v"+sourceRef, result.Error.Error())
 	}
-	fmt.Printf("SP Info Tenant ID %v Source ID %v My ID %v \n", lh.PC.Tenant.ID, lh.PC.Source.ID, sp.ID)
 	if result := lh.PC.dbTransaction.Where(&so).First(&so); result.Error != nil {
 		return fmt.Errorf("Error finding service offering %s : %v"+sourceRef, result.Error.Error())
 	}
-	fmt.Printf("S0 Info Tenant ID %v Source ID %v My ID %v\n", lh.PC.Tenant.ID, lh.PC.Source.ID, so.ID)
 	sp.ServiceOfferingID = sql.NullInt64{Int64: so.ID, Valid: true}
 	if result := lh.PC.dbTransaction.Save(&sp); result.Error != nil {
 		return fmt.Errorf("Error saving service plan %s : %v"+sourceRef, result.Error.Error())

@@ -18,6 +18,10 @@ import (
 	"gorm.io/gorm"
 )
 
+var IgnoreTowerObject = errors.New("Ignoring non job template or workflow job template nodes")
+
+var inventoriesRe = regexp.MustCompile(`\/api\/v2\/inventories\/(\w)\/`)
+
 type ServiceOfferingNode struct {
 	base.Base
 	base.Tower
@@ -36,6 +40,7 @@ type ServiceOfferingNode struct {
 	ServiceInventorySourceRef    string `gorm:"-"`
 	RootServiceOfferingSourceRef string `gorm:"-"`
 	ServiceOfferingSourceRef     string `gorm:"-"`
+	UnifiedJobType               string `gorm:"-"`
 }
 
 func (son *ServiceOfferingNode) validateAttributes(attrs map[string]interface{}) error {
@@ -43,11 +48,17 @@ func (son *ServiceOfferingNode) validateAttributes(attrs map[string]interface{})
 		"created",
 		"modified",
 		"workflow_job_template",
-		"unified_job_template"}
+		"unified_job_template",
+		"unified_job_type"}
 	for _, name := range requiredAttrs {
 		if _, ok := attrs[name]; !ok {
 			return errors.New("Missing Required Attribute " + name)
 		}
+	}
+
+	objType := attrs["unified_job_type"].(string)
+	if objType != "job" && objType != "workflow_job" {
+		return IgnoreTowerObject
 	}
 	return nil
 }
@@ -59,7 +70,8 @@ func (son *ServiceOfferingNode) makeObject(attrs map[string]interface{}) error {
 	}
 	extra := make(map[string]interface{})
 
-	extra["unified_job_type"] = "job"
+	extra["unified_job_type"] = attrs["unified_job_type"].(string)
+	son.UnifiedJobType = attrs["unified_job_type"].(string)
 
 	valueString, err := json.Marshal(extra)
 	if err != nil {
@@ -77,11 +89,10 @@ func (son *ServiceOfferingNode) makeObject(attrs map[string]interface{}) error {
 	son.SourceRef = attrs["id"].(json.Number).String()
 	son.RootServiceOfferingSourceRef = attrs["workflow_job_template"].(json.Number).String()
 	son.ServiceOfferingSourceRef = attrs["unified_job_template"].(json.Number).String()
-	re := regexp.MustCompile(`\/api\/v2\/inventories\/(\w)\/`)
 
 	switch attrs["inventory"].(type) {
 	case string:
-		s := re.FindStringSubmatch(attrs["inventory"].(string))
+		s := inventoriesRe.FindStringSubmatch(attrs["inventory"].(string))
 		if len(s) > 0 {
 			son.ServiceInventorySourceRef = s[1]
 		}

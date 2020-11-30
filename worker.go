@@ -41,6 +41,8 @@ type InventoryContext struct {
 }
 
 func startInventoryWorker(ctx context.Context, db DatabaseContext, message UploadRequest, shutdown chan struct{}, wg *sync.WaitGroup) {
+	fmt.Println("Inventory Worker started")
+	defer fmt.Println("Inventory Worker finished")
 	glog := logger.GetLogger(ctx)
 	defer glog.Info("Inventory worker terminating")
 	defer wg.Done()
