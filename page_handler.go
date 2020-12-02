@@ -44,6 +44,7 @@ type PageContext struct {
 	credentialTypeSourceRefs             []string
 	workflowNodeSourceRefs               []string
 	dbTransaction                        *gorm.DB
+	servicecredentialhandler             servicecredential.Persister
 }
 type PageResponse map[string]interface{}
 
@@ -59,6 +60,7 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 		glog:          logger}
 	pc.InventoryMap = make(map[string][]int64)
 	pc.ServiceCredentialToCredentialTypeMap = make(map[string][]int64)
+	pc.servicecredentialhandler = servicecredential.ServiceCredentialHandler
 	return &pc
 }
 
@@ -253,7 +255,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
 		sc := &servicecredential.ServiceCredential{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = sc.CreateOrUpdate(ctx, pc.dbTransaction, obj)
+		err = pc.servicecredentialhandler.CreateOrUpdate(ctx, pc.dbTransaction, sc, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding service credential %s", sc.SourceRef)
 			return err

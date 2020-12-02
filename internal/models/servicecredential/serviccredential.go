@@ -32,43 +32,17 @@ type ServiceCredential struct {
 	ServiceCredentialTypeSourceRef string `gorm:"-"`
 }
 
-func (sc *ServiceCredential) validateAttributes(attrs map[string]interface{}) error {
-	requiredAttrs := []string{"created",
-		"modified",
-		"name",
-		"id",
-		"description",
-		"credential_type"}
-	for _, name := range requiredAttrs {
-		if _, ok := attrs[name]; !ok {
-			return errors.New("Missing Required Attribute " + name)
-		}
-	}
-	return nil
+type Persister interface {
+	Delete(ctx context.Context, tx *gorm.DB, sc *ServiceCredential, sourceRefs []string) error
+	CreateOrUpdate(ctx context.Context, tx *gorm.DB, sc *ServiceCredential, attrs map[string]interface{}) error
 }
 
-func (sc *ServiceCredential) makeObject(attrs map[string]interface{}) error {
-	err := sc.validateAttributes(attrs)
-	if err != nil {
-		return err
-	}
+type DefaultPersister struct{}
 
-	sc.SourceCreatedAt, err = base.TowerTime(attrs["created"].(string))
-	if err != nil {
-		return err
-	}
-	/*sc.SourceUpdatedAt, err = towerTime(attrs["modified"].(string))
-	if err != nil {
-		return err
-	}*/
-	sc.Description = attrs["description"].(string)
-	sc.Name = attrs["name"].(string)
-	sc.SourceRef = attrs["id"].(json.Number).String()
-	sc.ServiceCredentialTypeSourceRef = attrs["credential_type"].(json.Number).String()
-	return nil
-}
+var ServiceCredentialHandler Persister = &DefaultPersister{}
 
-func (sc *ServiceCredential) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
+// CreateOrUpdate a ServiceCredential Object in the Database
+func (DefaultPersister) CreateOrUpdate(ctx context.Context, tx *gorm.DB, sc *ServiceCredential, attrs map[string]interface{}) error {
 	err := sc.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new service credential object %v", err)
@@ -104,7 +78,9 @@ func (sc *ServiceCredential) CreateOrUpdate(ctx context.Context, tx *gorm.DB, at
 	return nil
 }
 
-func (sc *ServiceCredential) DeleteOldServiceCredentials(ctx context.Context, tx *gorm.DB, sourceRefs []string) error {
+// Delete any stale objects from an earlier run, the sourceRefs includes the current list
+// of valid ids
+func (DefaultPersister) Delete(ctx context.Context, tx *gorm.DB, sc *ServiceCredential, sourceRefs []string) error {
 	results, err := sc.getDeleteIDs(tx, sourceRefs)
 	if err != nil {
 		log.Errorf("Error getting Delete IDs for service credentials %v", err)
@@ -118,6 +94,41 @@ func (sc *ServiceCredential) DeleteOldServiceCredentials(ctx context.Context, tx
 			return result.Error
 		}
 	}
+	return nil
+}
+func (sc *ServiceCredential) validateAttributes(attrs map[string]interface{}) error {
+	requiredAttrs := []string{"created",
+		"modified",
+		"name",
+		"id",
+		"description",
+		"credential_type"}
+	for _, name := range requiredAttrs {
+		if _, ok := attrs[name]; !ok {
+			return errors.New("Missing Required Attribute " + name)
+		}
+	}
+	return nil
+}
+
+func (sc *ServiceCredential) makeObject(attrs map[string]interface{}) error {
+	err := sc.validateAttributes(attrs)
+	if err != nil {
+		return err
+	}
+
+	sc.SourceCreatedAt, err = base.TowerTime(attrs["created"].(string))
+	if err != nil {
+		return err
+	}
+	/*sc.SourceUpdatedAt, err = towerTime(attrs["modified"].(string))
+	if err != nil {
+		return err
+	}*/
+	sc.Description = attrs["description"].(string)
+	sc.Name = attrs["name"].(string)
+	sc.SourceRef = attrs["id"].(json.Number).String()
+	sc.ServiceCredentialTypeSourceRef = attrs["credential_type"].(json.Number).String()
 	return nil
 }
 

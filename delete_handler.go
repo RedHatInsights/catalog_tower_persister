@@ -32,7 +32,7 @@ func (dh *DeleteHandler) Process(ctx context.Context) error {
 
 	if len(dh.PC.credentialSourceRefs) > 0 {
 		sc := &servicecredential.ServiceCredential{Source: *dh.PC.Source, Tenant: *dh.PC.Tenant}
-		if err := sc.DeleteOldServiceCredentials(ctx, dh.PC.dbTransaction, dh.PC.credentialSourceRefs); err != nil {
+		if err := dh.PC.servicecredentialhandler.Delete(ctx, dh.PC.dbTransaction, sc, dh.PC.credentialSourceRefs); err != nil {
 			dh.PC.glog.Errorf("Error deleting Service Credentials %v", err)
 			return err
 		}
