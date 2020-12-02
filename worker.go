@@ -135,7 +135,7 @@ func (inv *InventoryContext) process(ctx context.Context, url string, externalTe
 		switch hdr.Typeflag {
 		case tar.TypeReg:
 			inv.glog.Infof("Contents of %s", hdr.Name)
-			err = inv.pageContext.Process(hdr.Name, tr)
+			err = inv.pageContext.Process(ctx, hdr.Name, tr)
 			if err != nil {
 				inv.glog.Errorf("Error handling file %s %v", hdr.Name, err)
 				return err
@@ -160,7 +160,7 @@ func (inv *InventoryContext) postProcess(ctx context.Context) error {
 		return err
 	}
 	dh := DeleteHandler{PC: inv.pageContext}
-	err = dh.Process()
+	err = dh.Process(ctx)
 	if err != nil {
 		inv.glog.Errorf("Error in linking objects %v", err)
 		return err

@@ -1,6 +1,7 @@
 package servicecredentialtype
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,7 +66,7 @@ func (sct *ServiceCredentialType) makeObject(attrs map[string]interface{}) error
 	return nil
 }
 
-func (sct *ServiceCredentialType) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}) error {
+func (sct *ServiceCredentialType) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
 	err := sct.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new credential type object %v", err)
@@ -104,7 +105,7 @@ func (sct *ServiceCredentialType) CreateOrUpdate(tx *gorm.DB, attrs map[string]i
 	return nil
 }
 
-func (sct *ServiceCredentialType) DeleteOldServiceCredentialTypes(tx *gorm.DB, sourceRefs []string) error {
+func (sct *ServiceCredentialType) DeleteOldServiceCredentialTypes(ctx context.Context, tx *gorm.DB, sourceRefs []string) error {
 	results, err := sct.getDeleteIDs(tx, sourceRefs)
 	if err != nil {
 		log.Errorf("Error getting Delete IDs for service credential types %v", err)

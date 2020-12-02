@@ -1,6 +1,7 @@
 package serviceofferingnode
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -100,7 +101,7 @@ func (son *ServiceOfferingNode) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (son *ServiceOfferingNode) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}) error {
+func (son *ServiceOfferingNode) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
 	err := son.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new service offering node object %v", err)

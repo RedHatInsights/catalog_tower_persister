@@ -1,6 +1,7 @@
 package servicecredential
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -67,7 +68,7 @@ func (sc *ServiceCredential) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (sc *ServiceCredential) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}) error {
+func (sc *ServiceCredential) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
 	err := sc.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new service credential object %v", err)
@@ -103,7 +104,7 @@ func (sc *ServiceCredential) CreateOrUpdate(tx *gorm.DB, attrs map[string]interf
 	return nil
 }
 
-func (sc *ServiceCredential) DeleteOldServiceCredentials(tx *gorm.DB, sourceRefs []string) error {
+func (sc *ServiceCredential) DeleteOldServiceCredentials(ctx context.Context, tx *gorm.DB, sourceRefs []string) error {
 	results, err := sc.getDeleteIDs(tx, sourceRefs)
 	if err != nil {
 		log.Errorf("Error getting Delete IDs for service credentials %v", err)

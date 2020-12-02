@@ -1,6 +1,7 @@
 package serviceinventory
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -95,7 +96,7 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (si *ServiceInventory) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}) error {
+func (si *ServiceInventory) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
 	err := si.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new service inventory object %v", err)
@@ -131,7 +132,7 @@ func (si *ServiceInventory) CreateOrUpdate(tx *gorm.DB, attrs map[string]interfa
 	return nil
 }
 
-func (si *ServiceInventory) DeleteOldServiceInventories(tx *gorm.DB, sourceRefs []string) error {
+func (si *ServiceInventory) DeleteOldServiceInventories(ctx context.Context, tx *gorm.DB, sourceRefs []string) error {
 	results, err := si.getDeleteIDs(tx, sourceRefs)
 	if err != nil {
 		log.Errorf("Error getting Delete IDs for service inventories %v", err)

@@ -1,6 +1,7 @@
 package serviceoffering
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -121,7 +122,7 @@ func (dbso *ServiceOffering) equal(other *ServiceOffering) bool {
 
 }
 
-func (so *ServiceOffering) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}) error {
+func (so *ServiceOffering) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
 	err := so.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new service offering object %v", err)
@@ -186,7 +187,7 @@ func (so *ServiceOffering) DeleteServicePlan(tx *gorm.DB) error {
 	return tx.Model(&serviceplan.ServicePlan{}).Where("source_ref = ? AND source_id = ?", so.SourceRef, so.SourceID).Delete(&serviceplan.ServicePlan{}).Error
 }
 
-func (so *ServiceOffering) DeleteOldServiceOfferings(tx *gorm.DB, sourceRefs []string) error {
+func (so *ServiceOffering) DeleteOldServiceOfferings(ctx context.Context, tx *gorm.DB, sourceRefs []string) error {
 	results, err := so.getDeleteIDs(tx, sourceRefs)
 	if err != nil {
 		log.Errorf("Error getting Delete IDs for service offerings %v", err)

@@ -1,6 +1,7 @@
 package serviceplan
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -67,7 +68,7 @@ func (sp *ServicePlan) Delete(tx *gorm.DB) error {
 	return tx.Model(&ServicePlan{}).Where("source_ref = ? AND source_id = ?", sp.SourceRef, sp.Source.ID).Delete(&ServicePlan{}).Error
 }
 
-func (sp *ServicePlan) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}, r io.Reader) error {
+func (sp *ServicePlan) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}, r io.Reader) error {
 	err := sp.makeObject(attrs, r)
 	if err != nil {
 		log.Infof("Error creating a new service plan object %v", err)

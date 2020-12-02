@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,7 +62,7 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 	return &pc
 }
 
-func (pc *PageContext) Process(url string, r io.Reader) error {
+func (pc *PageContext) Process(ctx context.Context, url string, r io.Reader) error {
 	objectType, err := getObjectType(url)
 	if err != nil {
 		pc.glog.Errorf("%v", err)
@@ -72,7 +73,7 @@ func (pc *PageContext) Process(url string, r io.Reader) error {
 	// want to read the file twice,
 	if objectType == "survey_spec" {
 		obj := make(map[string]interface{})
-		return pc.addObject(obj, url, r)
+		return pc.addObject(ctx, obj, url, r)
 	}
 	var pr PageResponse
 	decoder := json.NewDecoder(r)
@@ -89,9 +90,9 @@ func (pc *PageContext) Process(url string, r io.Reader) error {
 		if val, ok := pr["results"]; ok {
 			for _, obj := range val.([]interface{}) {
 				if ids {
-					err = pc.addIDList(obj.(map[string]interface{}), objectType)
+					err = pc.addIDList(ctx, obj.(map[string]interface{}), objectType)
 				} else {
-					err = pc.addObject(obj.(map[string]interface{}), url, nil)
+					err = pc.addObject(ctx, obj.(map[string]interface{}), url, nil)
 					if err != nil {
 						pc.glog.Errorf("Error adding object %s", objectType)
 						pc.glog.Errorf("Error %v", err)
@@ -101,7 +102,7 @@ func (pc *PageContext) Process(url string, r io.Reader) error {
 			}
 		}
 	} else {
-		err = pc.addObject(pr, url, nil)
+		err = pc.addObject(ctx, pr, url, nil)
 		if err != nil {
 			pc.glog.Errorf("Error adding object %s", url)
 			pc.glog.Errorf("Error %v", err)
@@ -134,7 +135,7 @@ func idExists(ids []string, id string) bool {
 	return false
 }
 
-func (pc *PageContext) addIDList(obj map[string]interface{}, objType string) error {
+func (pc *PageContext) addIDList(ctx context.Context, obj map[string]interface{}, objType string) error {
 	id := obj["id"].(json.Number).String()
 	switch objType {
 	case "job_template", "job_templates":
@@ -169,7 +170,7 @@ func (pc *PageContext) addIDList(obj map[string]interface{}, objType string) err
 	return nil
 }
 
-func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Reader) error {
+func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}, url string, r io.Reader) error {
 	var err error
 	if _, ok := obj["type"]; !ok {
 		// api/v2/job_templates/10/survey_spec
@@ -204,7 +205,7 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":
 		so := &serviceoffering.ServiceOffering{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = so.CreateOrUpdate(pc.dbTransaction, obj)
+		err = so.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding job template %s %v", so.SourceRef, err)
 			return err
@@ -229,7 +230,7 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 
 	case "inventory":
 		si := &serviceinventory.ServiceInventory{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = si.CreateOrUpdate(pc.dbTransaction, obj)
+		err = si.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding inventory %s %v", si.SourceRef, err)
 			return err
@@ -237,7 +238,7 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 
 	case "workflow_job_template_node":
 		son := &serviceofferingnode.ServiceOfferingNode{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = son.CreateOrUpdate(pc.dbTransaction, obj)
+		err = son.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err == serviceofferingnode.IgnoreTowerObject {
 			pc.glog.Info("Ignoring Tower Object")
 			return nil
@@ -252,7 +253,7 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
 		sc := &servicecredential.ServiceCredential{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = sc.CreateOrUpdate(pc.dbTransaction, obj)
+		err = sc.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding service credential %s", sc.SourceRef)
 			return err
@@ -267,14 +268,14 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 		}
 	case "credential_type":
 		sct := &servicecredentialtype.ServiceCredentialType{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = sct.CreateOrUpdate(pc.dbTransaction, obj)
+		err = sct.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding survey credential type %s", sct.SourceRef)
 			return err
 		}
 	case "job":
 		si := &serviceinstance.ServiceInstance{Source: *pc.Source, Tenant: *pc.Tenant}
-		err = si.CreateOrUpdate(pc.dbTransaction, obj)
+		err = si.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding service instance type %s", si.SourceRef)
 			return err
@@ -282,13 +283,13 @@ func (pc *PageContext) addObject(obj map[string]interface{}, url string, r io.Re
 	case "survey_spec":
 		ss := &serviceplan.ServicePlan{Source: *pc.Source, Tenant: *pc.Tenant}
 
-		err = ss.CreateOrUpdate(pc.dbTransaction, obj, r)
+		err = ss.CreateOrUpdate(ctx, pc.dbTransaction, obj, r)
 		if err != nil {
 			pc.glog.Errorf("Error adding survey spec %s", ss.SourceRef)
 			return err
 		}
 	}
-	err = pc.addIDList(obj, obj["type"].(string))
+	err = pc.addIDList(ctx, obj, obj["type"].(string))
 	return err
 }
 

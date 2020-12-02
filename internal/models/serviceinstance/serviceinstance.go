@@ -1,6 +1,7 @@
 package serviceinstance
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -82,7 +83,7 @@ func (si *ServiceInstance) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (si *ServiceInstance) CreateOrUpdate(tx *gorm.DB, attrs map[string]interface{}) error {
+func (si *ServiceInstance) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
 	err := si.makeObject(attrs)
 	if err != nil {
 		log.Infof("Error creating a new service instance object %v", err)
