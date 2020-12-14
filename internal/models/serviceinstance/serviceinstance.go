@@ -10,8 +10,6 @@ import (
 	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceinventory"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceplan"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
@@ -25,8 +23,6 @@ type ServiceInstance struct {
 	Extra              datatypes.JSON
 	TenantID           int64
 	SourceID           int64
-	Tenant             tenant.Tenant
-	Source             source.Source
 	ExternalURL        string
 	ServiceInventoryID sql.NullInt64 `gorm:"default:null"`
 	ServiceInventory   serviceinventory.ServiceInventory
@@ -90,7 +86,7 @@ func (si *ServiceInstance) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attr
 		return err
 	}
 	var instance ServiceInstance
-	err = tx.Where(&ServiceInstance{SourceID: si.Source.ID, Tower: base.Tower{SourceRef: si.SourceRef}}).First(&instance).Error
+	err = tx.Where(&ServiceInstance{SourceID: si.SourceID, Tower: base.Tower{SourceRef: si.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Service Instance %s", si.SourceRef)

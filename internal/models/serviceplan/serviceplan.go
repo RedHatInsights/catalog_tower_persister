@@ -9,8 +9,6 @@ import (
 	"io"
 
 	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 	"github.com/mkanoor/catalog_tower_persister/internal/spec2ddf"
 
 	log "github.com/sirupsen/logrus"
@@ -21,19 +19,14 @@ import (
 type ServicePlan struct {
 	base.Base
 	base.Tower
-	Name               string
-	Description        string
-	Extra              datatypes.JSON
-	CreateJsonSchema   datatypes.JSON
-	UpdateJsonSchema   datatypes.JSON
-	TenantID           int64
-	SourceID           int64
-	Tenant             tenant.Tenant
-	Source             source.Source
-	ServiceInventoryID sql.NullInt64 `gorm:"default:null"`
-	//ServiceInventory   serviceinventory.ServiceInventory
+	Name              string
+	Description       string
+	Extra             datatypes.JSON
+	CreateJsonSchema  datatypes.JSON
+	UpdateJsonSchema  datatypes.JSON
+	TenantID          int64
+	SourceID          int64
 	ServiceOfferingID sql.NullInt64 `gorm:"default:null"`
-	//ServiceOffering    serviceoffering.ServiceOffering
 }
 
 func (sp *ServicePlan) validateAttributes(attrs map[string]interface{}) error {
@@ -65,7 +58,7 @@ func (sp *ServicePlan) makeObject(attrs map[string]interface{}, r io.Reader) err
 }
 
 func (sp *ServicePlan) Delete(tx *gorm.DB) error {
-	return tx.Model(&ServicePlan{}).Where("source_ref = ? AND source_id = ?", sp.SourceRef, sp.Source.ID).Delete(&ServicePlan{}).Error
+	return tx.Model(&ServicePlan{}).Where("source_ref = ? AND source_id = ?", sp.SourceRef, sp.SourceID).Delete(&ServicePlan{}).Error
 }
 
 func (sp *ServicePlan) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}, r io.Reader) error {
@@ -75,7 +68,7 @@ func (sp *ServicePlan) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs ma
 		return err
 	}
 	var instance ServicePlan
-	err = tx.Where(&ServicePlan{SourceID: sp.Source.ID, Tower: base.Tower{SourceRef: sp.SourceRef}}).First(&instance).Error
+	err = tx.Where(&ServicePlan{SourceID: sp.SourceID, Tower: base.Tower{SourceRef: sp.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Survey Spec %s", sp.SourceRef)

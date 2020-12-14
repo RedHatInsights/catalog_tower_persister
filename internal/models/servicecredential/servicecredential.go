@@ -9,9 +9,6 @@ import (
 	"sort"
 
 	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/servicecredentialtype"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -26,10 +23,7 @@ type ServiceCredential struct {
 	TenantID                       int64
 	SourceID                       int64
 	ServiceCredentialTypeID        sql.NullInt64 `gorm:"default:null"`
-	Tenant                         tenant.Tenant
-	Source                         source.Source
-	ServiceCredentialType          servicecredentialtype.ServiceCredentialType
-	ServiceCredentialTypeSourceRef string `gorm:"-"`
+	ServiceCredentialTypeSourceRef string        `gorm:"-"`
 }
 
 type Persister interface {
@@ -50,7 +44,7 @@ func (DefaultPersister) CreateOrUpdate(ctx context.Context, tx *gorm.DB, sc *Ser
 	}
 
 	var instance ServiceCredential
-	err = tx.Where(&ServiceCredential{SourceID: sc.Source.ID, Tower: base.Tower{SourceRef: sc.SourceRef}}).First(&instance).Error
+	err = tx.Where(&ServiceCredential{SourceID: sc.SourceID, Tower: base.Tower{SourceRef: sc.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Credential %s", sc.SourceRef)
@@ -88,7 +82,7 @@ func (DefaultPersister) Delete(ctx context.Context, tx *gorm.DB, sc *ServiceCred
 	}
 	for _, res := range results {
 		log.Infof("Attempting to delete ServiceCredential with ID %d Source ref %s", res.ID, res.SourceRef)
-		result := tx.Delete(&ServiceCredential{SourceID: sc.Source.ID, TenantID: sc.Tenant.ID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
+		result := tx.Delete(&ServiceCredential{SourceID: sc.SourceID, TenantID: sc.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
 		if result.Error != nil {
 			log.Errorf("Error deleting Service Credential %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
@@ -137,7 +131,7 @@ func (sc *ServiceCredential) getDeleteIDs(tx *gorm.DB, sourceRefs []string) ([]b
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(sourceRefs)
 	length := len(sourceRefs)
-	if err := tx.Model(&ServiceCredential{SourceID: sc.Source.ID}).Find(&result).Error; err != nil {
+	if err := tx.Model(&ServiceCredential{SourceID: sc.SourceID}).Find(&result).Error; err != nil {
 		log.Errorf("Error fetching ServiceCredential %v", err)
 		return deleteResultIDRef, err
 	}

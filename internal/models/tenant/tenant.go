@@ -1,9 +1,11 @@
 package tenant
 
-import "github.com/mkanoor/catalog_tower_persister/internal/models/base"
+import "time"
 
 type Tenant struct {
-	base.Base
+	ID             int64 `gorm:"primaryKey"`
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 	Name           string
 	ExternalTenant string
 	Description    string

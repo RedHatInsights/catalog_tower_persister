@@ -13,8 +13,6 @@ import (
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceinventory"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceofferingicon"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceplan"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
@@ -31,8 +29,6 @@ type ServiceOffering struct {
 	Extra                     datatypes.JSON
 	TenantID                  int64
 	SourceID                  int64
-	Tenant                    tenant.Tenant
-	Source                    source.Source
 	ServiceInventoryID        sql.NullInt64 `gorm:"default:null"`
 	ServiceInventory          serviceinventory.ServiceInventory
 	ServiceOfferingIconID     sql.NullInt64 `gorm:"default:null"`
@@ -129,7 +125,7 @@ func (so *ServiceOffering) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attr
 		return err
 	}
 	var instance ServiceOffering
-	err = tx.Preload("ServiceInventory").Where(&ServiceOffering{SourceID: so.Source.ID, Tower: base.Tower{SourceRef: so.SourceRef}}).First(&instance).Error
+	err = tx.Preload("ServiceInventory").Where(&ServiceOffering{SourceID: so.SourceID, Tower: base.Tower{SourceRef: so.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Job Template %s", so.SourceRef)
@@ -195,7 +191,7 @@ func (so *ServiceOffering) DeleteOldServiceOfferings(ctx context.Context, tx *go
 	}
 	for _, res := range results {
 		log.Infof("Attempting to delete ServiceOffering with ID %d Source ref %s", res.ID, res.SourceRef)
-		result := tx.Delete(&ServiceOffering{SourceID: so.Source.ID, TenantID: so.Tenant.ID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
+		result := tx.Delete(&ServiceOffering{SourceID: so.SourceID, TenantID: so.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
 		if result.Error != nil {
 			log.Errorf("Error deleting Service Offering %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
@@ -209,7 +205,7 @@ func (so *ServiceOffering) getDeleteIDs(tx *gorm.DB, sourceRefs []string) ([]bas
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(sourceRefs)
 	length := len(sourceRefs)
-	if err := tx.Model(&ServiceOffering{SourceID: so.Source.ID}).Find(&result).Error; err != nil {
+	if err := tx.Model(&ServiceOffering{SourceID: so.SourceID}).Find(&result).Error; err != nil {
 		log.Errorf("Error fetching ServiceOffering %v", err)
 		return deleteResultIDRef, err
 	}

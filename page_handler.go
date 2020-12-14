@@ -206,7 +206,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":
-		so := &serviceoffering.ServiceOffering{Source: *pc.Source, Tenant: *pc.Tenant}
+		so := &serviceoffering.ServiceOffering{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 		err = so.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding job template %s %v", so.SourceRef, err)
@@ -231,7 +231,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		}
 
 	case "inventory":
-		si := &serviceinventory.ServiceInventory{Source: *pc.Source, Tenant: *pc.Tenant}
+		si := &serviceinventory.ServiceInventory{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 		err = si.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding inventory %s %v", si.SourceRef, err)
@@ -239,7 +239,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		}
 
 	case "workflow_job_template_node":
-		son := &serviceofferingnode.ServiceOfferingNode{Source: *pc.Source, Tenant: *pc.Tenant}
+		son := &serviceofferingnode.ServiceOfferingNode{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 		err = son.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err == serviceofferingnode.IgnoreTowerObject {
 			pc.glog.Info("Ignoring Tower Object")
@@ -254,7 +254,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			RootServiceOfferingSourceRef: son.RootServiceOfferingSourceRef,
 			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
-		sc := &servicecredential.ServiceCredential{Source: *pc.Source, Tenant: *pc.Tenant}
+		sc := &servicecredential.ServiceCredential{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 		err = pc.servicecredentialhandler.CreateOrUpdate(ctx, pc.dbTransaction, sc, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding service credential %s", sc.SourceRef)
@@ -269,21 +269,21 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			}
 		}
 	case "credential_type":
-		sct := &servicecredentialtype.ServiceCredentialType{Source: *pc.Source, Tenant: *pc.Tenant}
+		sct := &servicecredentialtype.ServiceCredentialType{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 		err = sct.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding survey credential type %s", sct.SourceRef)
 			return err
 		}
 	case "job":
-		si := &serviceinstance.ServiceInstance{Source: *pc.Source, Tenant: *pc.Tenant}
+		si := &serviceinstance.ServiceInstance{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 		err = si.CreateOrUpdate(ctx, pc.dbTransaction, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding service instance type %s", si.SourceRef)
 			return err
 		}
 	case "survey_spec":
-		ss := &serviceplan.ServicePlan{Source: *pc.Source, Tenant: *pc.Tenant}
+		ss := &serviceplan.ServicePlan{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 
 		err = ss.CreateOrUpdate(ctx, pc.dbTransaction, obj, r)
 		if err != nil {
