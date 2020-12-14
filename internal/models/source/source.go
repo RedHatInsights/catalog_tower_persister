@@ -3,17 +3,15 @@ package source
 import (
 	"database/sql"
 	"fmt"
-
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
+	"time"
 )
 
 type Source struct {
-	base.Base
+	ID                      int64 `gorm:"primaryKey"`
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 	TenantID                int64
 	UID                     string
-	RefreshStatus           string
-	Tenant                  tenant.Tenant
 	RefreshState            string
 	BytesReceived           int64
 	RefreshStartedAt        sql.NullTime

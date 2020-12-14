@@ -11,8 +11,6 @@ import (
 	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceinventory"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceoffering"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
@@ -30,8 +28,6 @@ type ServiceOfferingNode struct {
 	Extra                        datatypes.JSON
 	TenantID                     int64
 	SourceID                     int64
-	Tenant                       tenant.Tenant
-	Source                       source.Source
 	ServiceInventoryID           sql.NullInt64 `gorm:"default:null"`
 	ServiceInventory             serviceinventory.ServiceInventory
 	ServiceOfferingID            sql.NullInt64 `gorm:"default:null"`
@@ -108,7 +104,7 @@ func (son *ServiceOfferingNode) CreateOrUpdate(ctx context.Context, tx *gorm.DB,
 		return err
 	}
 	var instance ServiceOfferingNode
-	err = tx.Where(&ServiceOfferingNode{SourceID: son.Source.ID, Tower: base.Tower{SourceRef: son.SourceRef}}).First(&instance).Error
+	err = tx.Where(&ServiceOfferingNode{SourceID: son.SourceID, Tower: base.Tower{SourceRef: son.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Service Offering Node %s", son.SourceRef)

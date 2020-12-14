@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/mkanoor/catalog_tower_persister/internal/logger"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 	"github.com/mkanoor/catalog_tower_persister/internal/xrhidentity"
@@ -62,7 +61,7 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, message Uploa
 	inv.refreshStats.refreshStartedAt = time.Now().UTC()
 	inv.refreshStats.bytesReceived = int64(message.Size)
 
-	uid := "123456789"
+	uid := "1ea49c48-8571-469c-8511-64ae8311e193"
 	err = inv.setup(db, xrh.Identity.AccountNumber, uid)
 	if err != nil {
 		inv.glog.Errorf("Error setting up tenant and source %v", err)
@@ -179,7 +178,7 @@ func (inv *InventoryContext) findOrCreateTenant(db DatabaseContext, v string) (*
 }
 
 func (inv *InventoryContext) findOrCreateSource(db DatabaseContext, uid string) (*source.Source, error) {
-	source := source.Source{UID: uid, Tenant: *inv.tenant}
+	source := source.Source{UID: uid, TenantID: inv.tenant.ID}
 	if result := db.DB.Where(&source).First(&source); result.Error != nil {
 		if result = db.DB.Create(&source); result.Error != nil {
 			return nil, fmt.Errorf("Error creating source: %v", result.Error.Error())
@@ -204,7 +203,7 @@ func (inv *InventoryContext) singleRefresh(db DatabaseContext) error {
 	inv.source.RefreshFinishedAt = sql.NullTime{}
 	inv.source.RefreshState = "active"
 	//db.DB.Save(&inv.Source)
-	result := db.DB.Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).Find(&source.Source{Base: base.Base{ID: inv.source.ID}}).Updates(inv.source)
+	result := db.DB.Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).Find(&source.Source{ID: inv.source.ID}).Updates(inv.source)
 	if result.Error != nil {
 		log.Errorf("Error locking source %d %v", inv.source.ID, result.Error)
 		return result.Error
@@ -213,7 +212,7 @@ func (inv *InventoryContext) singleRefresh(db DatabaseContext) error {
 }
 
 func (inv *InventoryContext) updateSource(db DatabaseContext, uid string, state string) error {
-	source := source.Source{UID: uid, Tenant: *inv.tenant}
+	source := source.Source{UID: uid, TenantID: inv.tenant.ID}
 	result := db.DB.Where(&source).First(&source)
 	if result.Error == nil {
 		source.RefreshFinishedAt = sql.NullTime{Valid: true, Time: inv.refreshStats.refreshFinishedAt}

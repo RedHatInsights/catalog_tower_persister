@@ -9,8 +9,6 @@ import (
 	"sort"
 
 	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
@@ -26,8 +24,6 @@ type ServiceInventory struct {
 	Extra    datatypes.JSON
 	TenantID int64
 	SourceID int64
-	Tenant   tenant.Tenant
-	Source   source.Source
 }
 
 func (si *ServiceInventory) validateAttributes(attrs map[string]interface{}) error {
@@ -103,7 +99,7 @@ func (si *ServiceInventory) CreateOrUpdate(ctx context.Context, tx *gorm.DB, att
 		return err
 	}
 	var instance ServiceInventory
-	err = tx.Where(&ServiceInventory{SourceID: si.Source.ID, Tower: base.Tower{SourceRef: si.SourceRef}}).First(&instance).Error
+	err = tx.Where(&ServiceInventory{SourceID: si.SourceID, Tower: base.Tower{SourceRef: si.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Inventory %s", si.SourceRef)
@@ -140,7 +136,7 @@ func (si *ServiceInventory) DeleteOldServiceInventories(ctx context.Context, tx 
 	}
 	for _, res := range results {
 		log.Infof("Attempting to delete ServiceInventory with ID %d Source ref %s", res.ID, res.SourceRef)
-		result := tx.Delete(&ServiceInventory{SourceID: si.Source.ID, TenantID: si.Tenant.ID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
+		result := tx.Delete(&ServiceInventory{SourceID: si.SourceID, TenantID: si.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
 		if result.Error != nil {
 			log.Errorf("Error deleting Service Inventory %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
@@ -154,7 +150,7 @@ func (si *ServiceInventory) getDeleteIDs(tx *gorm.DB, sourceRefs []string) ([]ba
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(sourceRefs)
 	length := len(sourceRefs)
-	if err := tx.Model(&ServiceInventory{SourceID: si.Source.ID}).Find(&result).Error; err != nil {
+	if err := tx.Model(&ServiceInventory{SourceID: si.SourceID}).Find(&result).Error; err != nil {
 		log.Errorf("Error fetching ServiceInventory %v", err)
 		return deleteResultIDRef, err
 	}

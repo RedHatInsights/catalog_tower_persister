@@ -8,8 +8,6 @@ import (
 	"sort"
 
 	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -24,8 +22,6 @@ type ServiceCredentialType struct {
 	Namespace   string
 	TenantID    int64
 	SourceID    int64
-	Tenant      tenant.Tenant
-	Source      source.Source
 }
 
 func (sct *ServiceCredentialType) validateAttributes(attrs map[string]interface{}) error {
@@ -75,7 +71,7 @@ func (sct *ServiceCredentialType) CreateOrUpdate(ctx context.Context, tx *gorm.D
 
 	var instance ServiceCredentialType
 
-	err = tx.Where(&ServiceCredentialType{SourceID: sct.Source.ID, Tower: base.Tower{SourceRef: sct.SourceRef}}).First(&instance).Error
+	err = tx.Where(&ServiceCredentialType{SourceID: sct.SourceID, Tower: base.Tower{SourceRef: sct.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Credential Type %s", sct.SourceRef)
@@ -113,7 +109,7 @@ func (sct *ServiceCredentialType) DeleteOldServiceCredentialTypes(ctx context.Co
 	}
 	for _, res := range results {
 		log.Infof("Attempting to delete ServiceCredentialType with ID %d Source ref %s", res.ID, res.SourceRef)
-		result := tx.Delete(&ServiceCredentialType{SourceID: sct.Source.ID, TenantID: sct.Tenant.ID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
+		result := tx.Delete(&ServiceCredentialType{SourceID: sct.SourceID, TenantID: sct.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
 		if result.Error != nil {
 			log.Errorf("Error deleting Service CredentialType %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
@@ -127,7 +123,7 @@ func (sct *ServiceCredentialType) getDeleteIDs(tx *gorm.DB, sourceRefs []string)
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(sourceRefs)
 	length := len(sourceRefs)
-	if err := tx.Model(&ServiceCredentialType{SourceID: sct.Source.ID}).Find(&result).Error; err != nil {
+	if err := tx.Model(&ServiceCredentialType{SourceID: sct.SourceID}).Find(&result).Error; err != nil {
 		log.Errorf("Error fetching ServiceCredentialType %v", err)
 		return deleteResultIDRef, err
 	}
