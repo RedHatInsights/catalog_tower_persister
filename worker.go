@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mkanoor/catalog_tower_persister/internal/catalogtask"
 	"github.com/mkanoor/catalog_tower_persister/internal/logger"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/source"
 	"github.com/mkanoor/catalog_tower_persister/internal/models/tenant"
-	"github.com/mkanoor/catalog_tower_persister/internal/xrhidentity"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -37,9 +37,10 @@ type InventoryContext struct {
 	lastRefreshTime    time.Time
 	pageContext        *PageContext
 	glog               logger.Logger
+	catalogTask        catalogtask.CatalogTask
 }
 
-func startInventoryWorker(ctx context.Context, db DatabaseContext, message UploadRequest, shutdown chan struct{}, wg *sync.WaitGroup) {
+func startInventoryWorker(ctx context.Context, db DatabaseContext, message MessagePayload, headers map[string]string, shutdown chan struct{}, wg *sync.WaitGroup) {
 	fmt.Println("Inventory Worker started")
 	defer fmt.Println("Inventory Worker finished")
 	glog := logger.GetLogger(ctx)
@@ -47,52 +48,50 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, message Uploa
 	defer wg.Done()
 	glog.Info("Starting Inventory Worker")
 	duration := 15 * time.Minute
-	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	new_ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
-
-	xrh, err := xrhidentity.GetXRHIdentity(message.EncodedXRH)
-	if err != nil {
-		glog.Errorf("Error parsing XRH Identity %v", err)
-		return
-	}
 
 	inv := InventoryContext{glog: glog}
 	inv.timeToWait = 5 * time.Minute // Wait five minutes for a response
 	inv.refreshStats.refreshStartedAt = time.Now().UTC()
-	inv.refreshStats.bytesReceived = int64(message.Size)
+	inv.refreshStats.bytesReceived = message.Size
+	inv.catalogTask = catalogtask.MakeCatalogTask(ctx, message.TaskURL, headers)
 
-	uid := "1ea49c48-8571-469c-8511-64ae8311e193"
-	err = inv.setup(db, xrh.Identity.AccountNumber, uid)
+	err := inv.setup(db, message.TenantID, message.SourceID)
 	if err != nil {
+		inv.updateTask("completed", "error", err.Error())
 		inv.glog.Errorf("Error setting up tenant and source %v", err)
 		return
 	}
+	inv.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size))
 	inv.dbTransaction = db.DB.Begin()
 	inv.pageContext = MakePageContext(inv.glog, inv.tenant, inv.source, inv.dbTransaction)
-	err = inv.process(ctx, message.URL, xrh.Identity.AccountNumber, uid, shutdown)
+	err = inv.process(new_ctx, message.DataURL, shutdown)
 	inv.refreshStats.refreshFinishedAt = time.Now().UTC()
 	if err != nil {
 		inv.glog.Errorf("Rolling back database changes %v", err)
 		inv.dbTransaction.Rollback()
-		inv.updateSource(db, uid, "failed")
+		inv.updateSource(db, message.SourceID, "failed")
+		inv.updateTask("completed", "error", err.Error())
 	} else {
 		inv.dbTransaction.Commit()
 		inv.glog.Info("Commited database changes")
-		inv.updateSource(db, uid, "success")
+		inv.updateSource(db, message.SourceID, "success")
+		inv.updateTask("completed", "ok", "Success")
 	}
 }
 
-func (inv *InventoryContext) setup(db DatabaseContext, externalTenant string, uid string) error {
+func (inv *InventoryContext) setup(db DatabaseContext, tenantID int64, sourceID int64) error {
 	var err error
-	inv.tenant, err = inv.findOrCreateTenant(db, externalTenant)
+	inv.tenant, err = inv.findTenant(db, tenantID)
 	if err != nil {
-		inv.glog.Errorf("Could not create tenant %v", err)
+		inv.glog.Errorf("Could not find tenant %v", err)
 		return err
 	}
 
-	inv.source, err = inv.findOrCreateSource(db, uid)
+	inv.source, err = inv.findSource(db, sourceID)
 	if err != nil {
-		inv.glog.Errorf("Could not create source %v", err)
+		inv.glog.Errorf("Could not find source %v", err)
 		return err
 	}
 
@@ -104,7 +103,7 @@ func (inv *InventoryContext) setup(db DatabaseContext, externalTenant string, ui
 	return nil
 }
 
-func (inv *InventoryContext) process(ctx context.Context, url string, externalTenant string, uid string, shutdown chan struct{}) error {
+func (inv *InventoryContext) process(ctx context.Context, url string, shutdown chan struct{}) error {
 
 	inv.glog.Infof("Fetching URL %s", url)
 
@@ -167,22 +166,20 @@ func (inv *InventoryContext) postProcess(ctx context.Context) error {
 	return nil
 }
 
-func (inv *InventoryContext) findOrCreateTenant(db DatabaseContext, v string) (*tenant.Tenant, error) {
-	tenant := tenant.Tenant{ExternalTenant: v}
-	if result := db.DB.Where("external_tenant = ?", v).First(&tenant); result.Error != nil {
-		if result = db.DB.Create(&tenant); result.Error != nil {
-			return nil, fmt.Errorf("Error creating tenant: %v" + result.Error.Error())
-		}
+func (inv *InventoryContext) findTenant(db DatabaseContext, tenantID int64) (*tenant.Tenant, error) {
+	tenant := tenant.Tenant{}
+	err := db.DB.First(&tenant, tenantID).Error
+	if err != nil {
+		return nil, fmt.Errorf("Error finding tenant: %v", err)
 	}
 	return &tenant, nil
 }
 
-func (inv *InventoryContext) findOrCreateSource(db DatabaseContext, uid string) (*source.Source, error) {
-	source := source.Source{UID: uid, TenantID: inv.tenant.ID}
-	if result := db.DB.Where(&source).First(&source); result.Error != nil {
-		if result = db.DB.Create(&source); result.Error != nil {
-			return nil, fmt.Errorf("Error creating source: %v", result.Error.Error())
-		}
+func (inv *InventoryContext) findSource(db DatabaseContext, sourceID int64) (*source.Source, error) {
+	source := source.Source{}
+	err := db.DB.First(&source, sourceID).Error
+	if err != nil {
+		return nil, fmt.Errorf("Error finding source: %v", err)
 	}
 
 	return &source, nil
@@ -211,8 +208,8 @@ func (inv *InventoryContext) singleRefresh(db DatabaseContext) error {
 	return nil
 }
 
-func (inv *InventoryContext) updateSource(db DatabaseContext, uid string, state string) error {
-	source := source.Source{UID: uid, TenantID: inv.tenant.ID}
+func (inv *InventoryContext) updateSource(db DatabaseContext, sourceID int64, state string) error {
+	source := source.Source{ID: sourceID, TenantID: inv.tenant.ID}
 	result := db.DB.Where(&source).First(&source)
 	if result.Error == nil {
 		source.RefreshFinishedAt = sql.NullTime{Valid: true, Time: inv.refreshStats.refreshFinishedAt}
@@ -225,4 +222,14 @@ func (inv *InventoryContext) updateSource(db DatabaseContext, uid string, state 
 		db.DB.Save(&source)
 	}
 	return result.Error
+}
+
+func (inv *InventoryContext) updateTask(state, status, msg string) error {
+	data := map[string]interface{}{"status": status, "state": state, "message": msg}
+	err := inv.catalogTask.Update(data)
+	if err != nil {
+		log.Errorf("Error updating catalog task %v", err)
+		return err
+	}
+	return nil
 }
