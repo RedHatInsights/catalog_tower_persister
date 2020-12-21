@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"

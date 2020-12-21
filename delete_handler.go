@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/models/servicecredential"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/servicecredentialtype"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceinventory"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceoffering"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/servicecredential"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/servicecredentialtype"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceoffering"
 )
 
 type DeleteHandler struct {

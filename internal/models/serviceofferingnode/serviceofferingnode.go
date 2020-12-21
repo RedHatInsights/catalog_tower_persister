@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceinventory"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceoffering"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceoffering"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"

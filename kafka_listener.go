@@ -8,7 +8,7 @@ import (
 
 	"encoding/json"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/logger"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
