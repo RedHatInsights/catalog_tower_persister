@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
-	"time"
 
 	"encoding/json"
 
@@ -14,23 +14,17 @@ import (
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
-type UploadRequest struct {
-	Account    string                 `json:"account"`
-	Category   string                 `json:"category"`
-	Metadata   map[string]interface{} `json:"metadata"`
-	RequestID  string                 `json:"request_id"`
-	Principal  string                 `json:"principal"`
-	Service    string                 `json:"service"`
-	Size       int                    `json:"size"`
-	URL        string                 `json:"url"`
-	EncodedXRH string                 `json:"b64_identity"`
-	Time       time.Time              `json:"timestamp"`
+type MessagePayload struct {
+	TenantID int64  `json:"tenant_id"`
+	SourceID int64  `json:"source_id"`
+	TaskURL  string `json:"task_url"`
+	DataURL  string `json:"data_url"`
+	Size     int64  `json:"size"`
 }
 
 func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *sync.WaitGroup) {
 
-	// topic := "platform.receptor-controller.responses"
-	topic := "test"
+	topic := "platform.catalog.persister"
 	defer log.Info("Kafka Listener exiting")
 	defer wg.Done()
 	ctx := context.Background()
@@ -43,7 +37,7 @@ func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *s
 	// Store the config
 	cm := kafka.ConfigMap{
 		"bootstrap.servers": "localhost:9092",
-		"group.id":          "madhu_test",
+		"group.id":          "catalog_tower_persisters",
 	}
 	//	"enable.partition.eof": true
 
@@ -83,8 +77,16 @@ func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *s
 
 						case *kafka.Message:
 							km := ev.(*kafka.Message)
-							var message UploadRequest
-							err := json.Unmarshal([]byte(string(km.Value)), &message)
+							messageHeaders := make(map[string]string)
+							var messagePayload MessagePayload
+							for _, hdr := range km.Headers {
+								fmt.Println("Key " + hdr.Key + " Value " + string(hdr.Value))
+								switch hdr.Key {
+								case "x-rh-identity", "x-rh-insights-request-id", "event_type":
+									messageHeaders[hdr.Key] = string(hdr.Value)
+								}
+							}
+							err := json.Unmarshal([]byte(string(km.Value)), &messagePayload)
 							if err != nil {
 								log.Errorf("Error parsing message" + err.Error())
 							} else {
@@ -93,7 +95,7 @@ func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *s
 								wg.Add(1)
 								counter++
 								nctx := logger.CtxWithLoggerID(ctx, counter)
-								go startInventoryWorker(nctx, dbContext, message, shutdown, wg)
+								go startInventoryWorker(nctx, dbContext, messagePayload, messageHeaders, shutdown, wg)
 							}
 
 						case kafka.PartitionEOF:
