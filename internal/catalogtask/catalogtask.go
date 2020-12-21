@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/logger"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 )
 
 type CatalogTask interface {

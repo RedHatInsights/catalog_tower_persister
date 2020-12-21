@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/spec2ddf"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/spec2ddf"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"

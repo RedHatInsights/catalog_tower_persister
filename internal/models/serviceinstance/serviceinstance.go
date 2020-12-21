@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceinventory"
-	"github.com/mkanoor/catalog_tower_persister/internal/models/serviceplan"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceplan"
 
 	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"

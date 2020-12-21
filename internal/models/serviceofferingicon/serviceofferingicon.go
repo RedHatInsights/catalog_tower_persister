@@ -1,7 +1,7 @@
 package serviceofferingicon
 
 import (
-	"github.com/mkanoor/catalog_tower_persister/internal/models/base"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 )
 
 type ServiceOfferingIcon struct {
