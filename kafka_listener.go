@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"sync"
 
 	"encoding/json"
 
 	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
+	"github.com/google/uuid"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
@@ -28,39 +28,32 @@ func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *s
 	defer log.Info("Kafka Listener exiting")
 	defer wg.Done()
 	ctx := context.Background()
-	var counter int
-
-	// --
-	// Create Consumer instance
-	// https://docs.confluent.io/current/clients/confluent-kafka-go/index.html#NewConsumer
 
 	// Store the config
 	cm := kafka.ConfigMap{
 		"bootstrap.servers": "localhost:9092",
 		"group.id":          "catalog_tower_persisters",
 	}
-	//	"enable.partition.eof": true
 
-	// Variable p holds the new Consumer instance.
-	c, e := kafka.NewConsumer(&cm)
+	c, err := kafka.NewConsumer(&cm)
 
 	// Check for errors in creating the Consumer
-	if e != nil {
-		if ke, ok := e.(kafka.Error); ok == true {
+	if err != nil {
+		if ke, ok := err.(kafka.Error); ok == true {
 			switch ec := ke.Code(); ec {
 			case kafka.ErrInvalidArg:
-				log.Errorf("Invalid args to configure kafka code %d %v", ec, e)
+				log.Errorf("Invalid args to configure kafka code %d %v", ec, err)
 			default:
-				log.Errorf("Error creating Kafka consure code %d %v", ec, e)
+				log.Errorf("Error creating Kafka consure code %d %v", ec, err)
 			}
 		} else {
 			// It's not a kafka.Error
-			log.Errorf("Error creating Kafka consumer %v", e.Error())
+			log.Errorf("Error creating Kafka consumer %v", err.Error())
 		}
 
 	} else {
-		if e := c.Subscribe(topic, nil); e != nil {
-			log.Errorf("Error subscribing to topic %v", e)
+		if err := c.Subscribe(topic, nil); err != nil {
+			log.Errorf("Error subscribing to topic %v", err)
 
 		} else {
 			doTerm := false
@@ -77,27 +70,8 @@ func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *s
 
 						case *kafka.Message:
 							km := ev.(*kafka.Message)
-							messageHeaders := make(map[string]string)
-							var messagePayload MessagePayload
-							for _, hdr := range km.Headers {
-								fmt.Println("Key " + hdr.Key + " Value " + string(hdr.Value))
-								switch hdr.Key {
-								case "x-rh-identity", "x-rh-insights-request-id", "event_type":
-									messageHeaders[hdr.Key] = string(hdr.Value)
-								}
-							}
-							err := json.Unmarshal([]byte(string(km.Value)), &messagePayload)
-							if err != nil {
-								log.Errorf("Error parsing message" + err.Error())
-							} else {
-								log.Info("Received Kafka Message")
-								log.Infof("#goroutines: %d", runtime.NumGoroutine())
-								wg.Add(1)
-								counter++
-								nctx := logger.CtxWithLoggerID(ctx, counter)
-								go startInventoryWorker(nctx, dbContext, messagePayload, messageHeaders, shutdown, wg)
-							}
 
+							processMessage(ctx, dbContext, shutdown, wg, km)
 						case kafka.PartitionEOF:
 							pe := ev.(kafka.PartitionEOF)
 							doTerm = true
@@ -128,4 +102,29 @@ func startKafkaListener(dbContext DatabaseContext, shutdown chan struct{}, wg *s
 		}
 	}
 
+}
+
+func processMessage(ctx context.Context, dbContext DatabaseContext, shutdown chan struct{}, wg *sync.WaitGroup, km *kafka.Message) {
+	messageHeaders := make(map[string]string)
+	var messagePayload MessagePayload
+	loggerID := uuid.New().String()
+	for _, hdr := range km.Headers {
+		switch hdr.Key {
+		case "x-rh-insights-request-id":
+			messageHeaders[hdr.Key] = string(hdr.Value)
+			loggerID = string(hdr.Value)
+		case "x-rh-identity", "event_type":
+			messageHeaders[hdr.Key] = string(hdr.Value)
+		}
+	}
+	err := json.Unmarshal([]byte(string(km.Value)), &messagePayload)
+	if err != nil {
+		log.Errorf("Error parsing message" + err.Error())
+	} else {
+		log.Info("Received Kafka Message")
+		log.Infof("#goroutines: %d", runtime.NumGoroutine())
+		wg.Add(1)
+		nctx := logger.CtxWithLoggerID(ctx, loggerID)
+		go startInventoryWorker(nctx, dbContext, messagePayload, messageHeaders, shutdown, wg)
+	}
 }
