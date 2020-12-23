@@ -106,7 +106,7 @@ func (si *ServiceInstance) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attr
 		log.Infof("Saving Service Instance source_ref %s", si.SourceRef)
 		err := tx.Save(&instance).Error
 		if err != nil {
-			log.Error("Error Updating Service Instance source_ref %s", si.SourceRef)
+			log.Errorf("Error Updating Service Instance source_ref %s", si.SourceRef)
 			return err
 		}
 	}

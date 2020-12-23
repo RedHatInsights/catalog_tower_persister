@@ -15,14 +15,14 @@ build:
 	go build -o ${BINARY} ${SRC_FILES}
 
 test:
-	go test -v ${TEST_FILES} ${SRC_FILES}
+	go test -v ./...
 
 test_debug:
-	dlv debug ${TEST_FILES} ${SRC_FILES}
+	dlv debug ./...
 
 coverage:
 	rm -rf coverage.out
-	go test -coverprofile=coverage.out ${TEST_FILES} ${SRC_FILES}
+	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out
 
 format:

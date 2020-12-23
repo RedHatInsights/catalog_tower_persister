@@ -89,7 +89,7 @@ func (sp *ServicePlan) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs ma
 		log.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
 		err := tx.Save(&instance).Error
 		if err != nil {
-			log.Error("Error Updating Service Plan  source_ref %s", sp.SourceRef)
+			log.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
 			return err
 		}
 	}
