@@ -142,7 +142,7 @@ func (so *ServiceOffering) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attr
 		var resp map[string]interface{}
 		err := json.Unmarshal(instance.Extra, &resp)
 		if err != nil {
-			log.Error("Error parsing extra in service offering source ref %s", so.SourceRef)
+			log.Errorf("Error parsing extra in service offering source ref %s", so.SourceRef)
 			return err
 		}
 
@@ -164,7 +164,7 @@ func (so *ServiceOffering) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attr
 			log.Infof("Saving Job Template source ref %s", so.SourceRef)
 			err := tx.Save(&instance).Error
 			if err != nil {
-				log.Error("Error Updating Service Offering %s", so.SourceRef)
+				log.Errorf("Error Updating Service Offering %s", so.SourceRef)
 				return err
 			}
 		} else {

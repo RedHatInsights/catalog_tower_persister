@@ -32,7 +32,7 @@ func (dh *DeleteHandler) Process(ctx context.Context) error {
 
 	if len(dh.PC.credentialSourceRefs) > 0 {
 		sc := &servicecredential.ServiceCredential{SourceID: dh.PC.Source.ID, TenantID: dh.PC.Tenant.ID}
-		if err := dh.PC.servicecredentialhandler.Delete(ctx, dh.PC.dbTransaction, sc, dh.PC.credentialSourceRefs); err != nil {
+		if err := dh.PC.servicecredentialrepo.DeleteUnwanted(ctx, sc, dh.PC.credentialSourceRefs); err != nil {
 			dh.PC.glog.Errorf("Error deleting Service Credentials %v", err)
 			return err
 		}
@@ -40,7 +40,7 @@ func (dh *DeleteHandler) Process(ctx context.Context) error {
 
 	if len(dh.PC.credentialTypeSourceRefs) > 0 {
 		sct := &servicecredentialtype.ServiceCredentialType{SourceID: dh.PC.Source.ID, TenantID: dh.PC.Tenant.ID}
-		if err := sct.DeleteOldServiceCredentialTypes(ctx, dh.PC.dbTransaction, dh.PC.credentialTypeSourceRefs); err != nil {
+		if err := dh.PC.servicecredentialtyperepo.DeleteUnwanted(ctx, sct, dh.PC.credentialSourceRefs); err != nil {
 			dh.PC.glog.Errorf("Error deleting Service credential types %v", err)
 			return err
 		}

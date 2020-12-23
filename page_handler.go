@@ -44,7 +44,8 @@ type PageContext struct {
 	credentialTypeSourceRefs             []string
 	workflowNodeSourceRefs               []string
 	dbTransaction                        *gorm.DB
-	servicecredentialhandler             servicecredential.Persister
+	servicecredentialrepo                servicecredential.Repository
+	servicecredentialtyperepo            servicecredentialtype.Repository
 }
 type PageResponse map[string]interface{}
 
@@ -60,7 +61,7 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 		glog:          logger}
 	pc.InventoryMap = make(map[string][]int64)
 	pc.ServiceCredentialToCredentialTypeMap = make(map[string][]int64)
-	pc.servicecredentialhandler = servicecredential.ServiceCredentialHandler
+	pc.servicecredentialrepo = servicecredential.NewGORMRepository(dbTransaction)
 	return &pc
 }
 
@@ -255,7 +256,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
 		sc := &servicecredential.ServiceCredential{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = pc.servicecredentialhandler.CreateOrUpdate(ctx, pc.dbTransaction, sc, obj)
+		err = pc.servicecredentialrepo.CreateOrUpdate(ctx, sc, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding service credential %s", sc.SourceRef)
 			return err
@@ -270,7 +271,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		}
 	case "credential_type":
 		sct := &servicecredentialtype.ServiceCredentialType{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = sct.CreateOrUpdate(ctx, pc.dbTransaction, obj)
+		err = pc.servicecredentialtyperepo.CreateOrUpdate(ctx, sct, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding survey credential type %s", sct.SourceRef)
 			return err

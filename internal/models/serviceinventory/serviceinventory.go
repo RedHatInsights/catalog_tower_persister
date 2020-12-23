@@ -121,7 +121,7 @@ func (si *ServiceInventory) CreateOrUpdate(ctx context.Context, tx *gorm.DB, att
 		log.Infof("Saving Inventory source ref %s", si.SourceRef)
 		err := tx.Save(&instance).Error
 		if err != nil {
-			log.Error("Error Updating Service Inventory %s %v", si.SourceRef, err)
+			log.Errorf("Error Updating Service Inventory %s %v", si.SourceRef, err)
 			return err
 		}
 	}

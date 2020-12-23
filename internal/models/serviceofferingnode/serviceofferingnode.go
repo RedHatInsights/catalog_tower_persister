@@ -126,7 +126,7 @@ func (son *ServiceOfferingNode) CreateOrUpdate(ctx context.Context, tx *gorm.DB,
 		log.Infof("Saving Service Offering source_ref %s", son.SourceRef)
 		err := tx.Save(&instance).Error
 		if err != nil {
-			log.Error("Error Updating Service Offering Node  source_ref %s", son.SourceRef)
+			log.Errorf("Error Updating Service Offering Node  source_ref %s", son.SourceRef)
 			return err
 		}
 	}
