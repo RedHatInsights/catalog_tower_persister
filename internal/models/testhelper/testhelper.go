@@ -20,6 +20,16 @@ func (a AnyTime) Match(v driver.Value) bool {
 	return ok
 }
 
+// AnyJSONB is an empty map[string]interface{} to match JSONB
+
+type AnyJSONB map[string]interface{}
+
+// Match satisfies sqlmock.Argument interface
+func (a AnyJSONB) Match(v driver.Value) bool {
+	_, ok := v.(map[string]interface{})
+	return ok
+}
+
 // MockDBSetup creates a mock DB to be used with Gorm
 func MockDBSetup(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 	t.Parallel()

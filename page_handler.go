@@ -46,6 +46,7 @@ type PageContext struct {
 	dbTransaction                        *gorm.DB
 	servicecredentialrepo                servicecredential.Repository
 	servicecredentialtyperepo            servicecredentialtype.Repository
+	serviceinventoryrepo                 serviceinventory.Repository
 }
 type PageResponse map[string]interface{}
 
@@ -62,6 +63,8 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 	pc.InventoryMap = make(map[string][]int64)
 	pc.ServiceCredentialToCredentialTypeMap = make(map[string][]int64)
 	pc.servicecredentialrepo = servicecredential.NewGORMRepository(dbTransaction)
+	pc.servicecredentialtyperepo = servicecredentialtype.NewGORMRepository(dbTransaction)
+	pc.serviceinventoryrepo = serviceinventory.NewGORMRepository(dbTransaction)
 	return &pc
 }
 
@@ -233,7 +236,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 
 	case "inventory":
 		si := &serviceinventory.ServiceInventory{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = si.CreateOrUpdate(ctx, pc.dbTransaction, obj)
+		err = pc.serviceinventoryrepo.CreateOrUpdate(ctx, si, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding inventory %s %v", si.SourceRef, err)
 			return err

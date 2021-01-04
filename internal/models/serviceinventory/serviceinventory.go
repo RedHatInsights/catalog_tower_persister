@@ -8,22 +8,46 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 
-	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
+
+// Repository interface supports deleted unwanted objects and creating or updating object
+type Repository interface {
+	DeleteUnwanted(ctx context.Context, sc *ServiceInventory, keepSourceRefs []string) error
+	CreateOrUpdate(ctx context.Context, sc *ServiceInventory, attrs map[string]interface{}) error
+	Stats() map[string]int
+}
+
+// gormRepository struct stores the DB handle and counters
+type gormRepository struct {
+	db      *gorm.DB
+	updates int
+	creates int
+	deletes int
+}
+
+// NewGORMRepository creates a new repository object
+func NewGORMRepository(db *gorm.DB) Repository {
+	return &gormRepository{db: db}
+}
+
+// Stats returns a map with the number of adds/updates/deletes
+func (gr *gormRepository) Stats() map[string]int {
+	return map[string]int{"adds": gr.creates, "updates": gr.updates, "deletes": gr.deletes}
+}
 
 type ServiceInventory struct {
 	base.Base
 	base.Tower
 	Name        string
 	Description string
-	//Extra JSONB `sql:"type:jsonb"`
-	Extra    datatypes.JSON
-	TenantID int64
-	SourceID int64
+	Extra       datatypes.JSON
+	TenantID    int64
+	SourceID    int64
 }
 
 func (si *ServiceInventory) validateAttributes(attrs map[string]interface{}) error {
@@ -67,6 +91,7 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 		return err
 	}
 	extra["organization_id"] = org_id
+
 	failures, err := attrs["inventory_sources_with_failures"].(json.Number).Int64()
 	if err != nil {
 		return err
@@ -92,70 +117,79 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (si *ServiceInventory) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}) error {
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, si *ServiceInventory, attrs map[string]interface{}) error {
+	logger := logger.GetLogger(ctx)
 	err := si.makeObject(attrs)
 	if err != nil {
-		log.Infof("Error creating a new service inventory object %v", err)
+		logger.Infof("Error creating a new service inventory object %v", err)
 		return err
 	}
 	var instance ServiceInventory
-	err = tx.Where(&ServiceInventory{SourceID: si.SourceID, Tower: base.Tower{SourceRef: si.SourceRef}}).First(&instance).Error
+	err = gr.db.Where(&ServiceInventory{SourceID: si.SourceID, Tower: base.Tower{SourceRef: si.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Infof("Creating a new Inventory %s", si.SourceRef)
-			if result := tx.Create(si); result.Error != nil {
+			logger.Infof("Creating a new Inventory %s", si.SourceRef)
+			if result := gr.db.Create(si); result.Error != nil {
 				return fmt.Errorf("Error creating inventory : %v" + result.Error.Error())
 			}
+			gr.creates++
 		} else {
-			log.Errorf("Error locating Inventory %s %v", si.SourceRef, err)
+			logger.Errorf("Error locating Inventory %s %v", si.SourceRef, err)
 			return err
 		}
 	} else {
-		log.Infof("Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
+		logger.Infof("Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
 		si.ID = instance.ID // Get the Existing ID for the object
 
-		log.Infof("Updating Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
+		logger.Infof("Updating Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
 		instance.Name = si.Name
 		instance.Description = si.Description
 		instance.Extra = si.Extra
-		log.Infof("Saving Inventory source ref %s", si.SourceRef)
-		err := tx.Save(&instance).Error
+		logger.Infof("Saving Inventory source ref %s", si.SourceRef)
+		err := gr.db.Save(&instance).Error
 		if err != nil {
-			log.Errorf("Error Updating Service Inventory %s %v", si.SourceRef, err)
+			logger.Errorf("Error Updating Service Inventory %s %v", si.SourceRef, err)
 			return err
 		}
+		gr.updates++
 	}
 	return nil
 }
 
-func (si *ServiceInventory) DeleteOldServiceInventories(ctx context.Context, tx *gorm.DB, sourceRefs []string) error {
-	results, err := si.getDeleteIDs(tx, sourceRefs)
+// DeleteUnwanted deletes any objects not listed in the keepSourceRefs
+// This is used to delete ServiceInventory that exist in our database but have been
+// deleted from the Ansible Tower
+func (gr *gormRepository) DeleteUnwanted(ctx context.Context, si *ServiceInventory, keepSourceRefs []string) error {
+	logger := logger.GetLogger(ctx)
+	results, err := si.getDeleteIDs(ctx, gr.db, keepSourceRefs)
 	if err != nil {
-		log.Errorf("Error getting Delete IDs for service inventories %v", err)
+		logger.Errorf("Error getting Delete IDs for service inventories %v", err)
 		return err
 	}
 	for _, res := range results {
-		log.Infof("Attempting to delete ServiceInventory with ID %d Source ref %s", res.ID, res.SourceRef)
-		result := tx.Delete(&ServiceInventory{SourceID: si.SourceID, TenantID: si.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
+		logger.Infof("Attempting to delete ServiceInventory with ID %d Source ref %s", res.ID, res.SourceRef)
+		result := gr.db.Delete(&ServiceInventory{SourceID: si.SourceID, TenantID: si.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
 		if result.Error != nil {
-			log.Errorf("Error deleting Service Inventory %d %s %v", res.ID, res.SourceRef, result.Error)
+			logger.Errorf("Error deleting Service Inventory %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
 		}
+		gr.deletes++
 	}
 	return nil
 }
 
-func (si *ServiceInventory) getDeleteIDs(tx *gorm.DB, sourceRefs []string) ([]base.ResultIDRef, error) {
+func (si *ServiceInventory) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
+	logger := logger.GetLogger(ctx)
 	var result []base.ResultIDRef
 	var deleteResultIDRef []base.ResultIDRef
-	sort.Strings(sourceRefs)
-	length := len(sourceRefs)
-	if err := tx.Model(&ServiceInventory{SourceID: si.SourceID}).Find(&result).Error; err != nil {
-		log.Errorf("Error fetching ServiceInventory %v", err)
+	sort.Strings(keepSourceRefs)
+	length := len(keepSourceRefs)
+	if err := tx.Table("service_inventories").Select("id, source_ref").Where("source_id = ? AND archived_at IS NULL", si.SourceID).Scan(&result).Error; err != nil {
+		logger.Errorf("Error fetching ServiceInventory %v", err)
 		return deleteResultIDRef, err
 	}
 	for _, res := range result {
-		if !base.SourceRefExists(res.SourceRef, sourceRefs, length) {
+		if !base.SourceRefExists(res.SourceRef, keepSourceRefs, length) {
 			deleteResultIDRef = append(deleteResultIDRef, res)
 		}
 	}
