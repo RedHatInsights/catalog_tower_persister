@@ -29,11 +29,9 @@ type ServiceCredential struct {
 
 // Repository interface supports deleted unwanted objects and creating or updating object
 type Repository interface {
-	DeleteUnwanted(ctx context.Context, sc *ServiceCredential, sourceRefs []string) error
+	DeleteUnwanted(ctx context.Context, sc *ServiceCredential, keepSourceRefs []string) error
 	CreateOrUpdate(ctx context.Context, sc *ServiceCredential, attrs map[string]interface{}) error
-	NumberOfUpdates() int
-	NumberOfCreates() int
-	NumberOfDeletes() int
+	Stats() map[string]int
 }
 
 // gormRepository struct stores the DB handle and counters
@@ -49,19 +47,9 @@ func NewGORMRepository(db *gorm.DB) Repository {
 	return &gormRepository{db: db}
 }
 
-// NumberOfUpdates returns the number of updates
-func (gr *gormRepository) NumberOfUpdates() int {
-	return gr.updates
-}
-
-// NumberOfCreates returns the number of creates
-func (gr *gormRepository) NumberOfCreates() int {
-	return gr.creates
-}
-
-// NumberOfDeletes returns the number of deletes
-func (gr *gormRepository) NumberOfDeletes() int {
-	return gr.deletes
+// Stats returns a map with the number of adds/updates/deletes
+func (gr *gormRepository) Stats() map[string]int {
+	return map[string]int{"adds": gr.creates, "updates": gr.updates, "deletes": gr.deletes}
 }
 
 // CreateOrUpdate a ServiceCredential Object in the Database
@@ -78,7 +66,6 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sc *ServiceCredent
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Infof("Creating a new Credential %s", sc.SourceRef)
-
 			if result := gr.db.Create(sc); result.Error != nil {
 				return fmt.Errorf("Error creating service credential : %v" + result.Error.Error())
 			}
@@ -105,12 +92,12 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sc *ServiceCredent
 	return nil
 }
 
-// DeleteUnwanted deletes any objects not listed in the sourceRefs
+// DeleteUnwanted deletes any objects not listed in the keepSourceRefs
 // This is used to delete ServiceCredentials that exist in our database but have been
 // deleted from the Ansible Tower
-func (gr *gormRepository) DeleteUnwanted(ctx context.Context, sc *ServiceCredential, sourceRefs []string) error {
+func (gr *gormRepository) DeleteUnwanted(ctx context.Context, sc *ServiceCredential, keepSourceRefs []string) error {
 	logger := logger.GetLogger(ctx)
-	results, err := sc.getDeleteIDs(ctx, gr.db, sourceRefs)
+	results, err := sc.getDeleteIDs(ctx, gr.db, keepSourceRefs)
 	if err != nil {
 		logger.Errorf("Error getting Delete IDs for service credentials %v", err)
 		return err
@@ -162,18 +149,18 @@ func (sc *ServiceCredential) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (sc *ServiceCredential) getDeleteIDs(ctx context.Context, tx *gorm.DB, sourceRefs []string) ([]base.ResultIDRef, error) {
+func (sc *ServiceCredential) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
 	logger := logger.GetLogger(ctx)
 	var result []base.ResultIDRef
 	var deleteResultIDRef []base.ResultIDRef
-	sort.Strings(sourceRefs)
-	length := len(sourceRefs)
+	sort.Strings(keepSourceRefs)
+	length := len(keepSourceRefs)
 	if err := tx.Table("service_credentials").Select("id, source_ref").Where("source_id = ? AND archived_at IS NULL", sc.SourceID).Scan(&result).Error; err != nil {
 		logger.Errorf("Error fetching ServiceCredential %v", err)
 		return deleteResultIDRef, err
 	}
 	for _, res := range result {
-		if !base.SourceRefExists(res.SourceRef, sourceRefs, length) {
+		if !base.SourceRefExists(res.SourceRef, keepSourceRefs, length) {
 			deleteResultIDRef = append(deleteResultIDRef, res)
 		}
 	}
