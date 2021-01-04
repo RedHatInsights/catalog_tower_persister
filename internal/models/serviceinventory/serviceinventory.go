@@ -40,6 +40,7 @@ func (gr *gormRepository) Stats() map[string]int {
 	return map[string]int{"adds": gr.creates, "updates": gr.updates, "deletes": gr.deletes}
 }
 
+// ServiceInventory maps an Inventory object in Ansible Tower
 type ServiceInventory struct {
 	base.Base
 	base.Tower
@@ -86,11 +87,11 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 	}
 
 	extra["pending_deletion"] = attrs["pending_deletion"].(bool)
-	org_id, err := attrs["organization"].(json.Number).Int64()
+	orgID, err := attrs["organization"].(json.Number).Int64()
 	if err != nil {
 		return err
 	}
-	extra["organization_id"] = org_id
+	extra["organization_id"] = orgID
 
 	failures, err := attrs["inventory_sources_with_failures"].(json.Number).Int64()
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// ServiceCredentialType maps a Credential Type from Ansible Tower
 type ServiceCredentialType struct {
 	base.Base
 	base.Tower
