@@ -1,6 +1,7 @@
 package spec2ddf
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
@@ -49,7 +50,9 @@ type DDFSpec struct {
 	SchemaType string    `json:"schemaType"`
 }
 
-func Convert(r io.Reader) ([]byte, error) {
+type Converter struct{}
+
+func (sc *Converter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
 	var ss SurveySpec
 	decoder := json.NewDecoder(r)
 	decoder.UseNumber()

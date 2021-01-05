@@ -19,6 +19,7 @@ import (
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceplan"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/source"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/tenant"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/spec2ddf"
 	"gorm.io/gorm"
 )
 
@@ -47,6 +48,7 @@ type PageContext struct {
 	servicecredentialrepo                servicecredential.Repository
 	servicecredentialtyperepo            servicecredentialtype.Repository
 	serviceinventoryrepo                 serviceinventory.Repository
+	serviceplanrepo                      serviceplan.Repository
 }
 type PageResponse map[string]interface{}
 
@@ -289,7 +291,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 	case "survey_spec":
 		ss := &serviceplan.ServicePlan{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 
-		err = ss.CreateOrUpdate(ctx, pc.dbTransaction, obj, r)
+		err = pc.serviceplanrepo.CreateOrUpdate(ctx, ss, &spec2ddf.Converter{}, obj, r)
 		if err != nil {
 			pc.glog.Errorf("Error adding survey spec %s", ss.SourceRef)
 			return err
