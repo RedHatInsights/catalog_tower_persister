@@ -24,7 +24,7 @@ func (dh *DeleteHandler) Process(ctx context.Context) error {
 
 	if len(dh.PC.inventorySourceRefs) > 0 {
 		si := &serviceinventory.ServiceInventory{SourceID: dh.PC.Source.ID, TenantID: dh.PC.Tenant.ID}
-		if err := si.DeleteOldServiceInventories(ctx, dh.PC.dbTransaction, dh.PC.inventorySourceRefs); err != nil {
+		if err := dh.PC.serviceinventoryrepo.DeleteUnwanted(ctx, si, dh.PC.inventorySourceRefs); err != nil {
 			dh.PC.glog.Errorf("Error deleting Service Inventories %v", err)
 			return err
 		}
