@@ -8,25 +8,101 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/spec2ddf"
 
-	log "github.com/sirupsen/logrus"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
+// ServicePlan maps the SurveySpec from Ansible Tower
 type ServicePlan struct {
 	base.Base
 	base.Tower
 	Name              string
 	Description       string
 	Extra             datatypes.JSON
-	CreateJsonSchema  datatypes.JSON
-	UpdateJsonSchema  datatypes.JSON
+	CreateJSONSchema  datatypes.JSON
+	UpdateJSONSchema  datatypes.JSON
 	TenantID          int64
 	SourceID          int64
 	ServiceOfferingID sql.NullInt64 `gorm:"default:null"`
+}
+
+//DDFConverter interface to convert Tower SPEC to DDF format
+type DDFConverter interface {
+	Convert(ctx context.Context, r io.Reader) ([]byte, error)
+}
+
+// Repository interface supports deleted unwanted objects and creating or updating object
+type Repository interface {
+	Delete(ctx context.Context, sp *ServicePlan) error
+	CreateOrUpdate(ctx context.Context, sp *ServicePlan, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error
+	Stats() map[string]int
+}
+
+// gormRepository struct stores the DB handle and counters
+type gormRepository struct {
+	db      *gorm.DB
+	updates int
+	creates int
+	deletes int
+}
+
+// NewGORMRepository creates a new repository object
+func NewGORMRepository(db *gorm.DB) Repository {
+	return &gormRepository{db: db}
+}
+
+// Stats returns a map with the number of adds/updates/deletes
+func (gr *gormRepository) Stats() map[string]int {
+	return map[string]int{"adds": gr.creates, "updates": gr.updates, "deletes": gr.deletes}
+}
+
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sp *ServicePlan, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error {
+	log := logger.GetLogger(ctx)
+	err := sp.makeObject(ctx, converter, attrs, r)
+	if err != nil {
+		log.Infof("Error creating a new service plan object %v", err)
+		return err
+	}
+	var instance ServicePlan
+	err = gr.db.Where(&ServicePlan{SourceID: sp.SourceID, Tower: base.Tower{SourceRef: sp.SourceRef}}).First(&instance).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Infof("Creating a new Survey Spec %s", sp.SourceRef)
+			if result := gr.db.Create(sp); result.Error != nil {
+				return fmt.Errorf("Error creating survey spec: %v" + result.Error.Error())
+			}
+		} else {
+			log.Infof("Error locating Survey Spec %s %v", sp.SourceRef, err)
+			return err
+		}
+		gr.creates++
+	} else {
+		log.Infof("Survey Spec %s exists in DB with ID %d", sp.SourceRef, instance.ID)
+		sp.ID = instance.ID // Get the Existing ID for the object
+		instance.CreateJSONSchema = sp.CreateJSONSchema
+		instance.Description = sp.Description
+		instance.Name = sp.Name
+
+		log.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
+		err := gr.db.Save(&instance).Error
+		if err != nil {
+			log.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
+			return err
+		}
+		gr.updates++
+	}
+	return nil
+}
+
+func (gr *gormRepository) Delete(ctx context.Context, sp *ServicePlan) error {
+	err := gr.db.Model(&ServicePlan{}).Where("source_ref = ? AND source_id = ?", sp.SourceRef, sp.SourceID).Delete(&ServicePlan{}).Error
+	if err == nil {
+		gr.deletes++
+	}
+	return err
 }
 
 func (sp *ServicePlan) validateAttributes(attrs map[string]interface{}) error {
@@ -40,58 +116,20 @@ func (sp *ServicePlan) validateAttributes(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (sp *ServicePlan) makeObject(attrs map[string]interface{}, r io.Reader) error {
+func (sp *ServicePlan) makeObject(ctx context.Context, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error {
+	log := logger.GetLogger(ctx)
 	err := sp.validateAttributes(attrs)
 	if err != nil {
 		return err
 	}
-	spec, err := spec2ddf.Convert(r)
+	spec, err := converter.Convert(ctx, r)
 	if err != nil {
 		log.Println("Error converting service plan")
 		return err
 	}
-	sp.CreateJsonSchema = datatypes.JSON(spec)
+	sp.CreateJSONSchema = datatypes.JSON(spec)
 	sp.Description = attrs["description"].(string)
 	sp.Name = attrs["name"].(string)
 	sp.SourceRef = attrs["id"].(json.Number).String()
-	return nil
-}
-
-func (sp *ServicePlan) Delete(tx *gorm.DB) error {
-	return tx.Model(&ServicePlan{}).Where("source_ref = ? AND source_id = ?", sp.SourceRef, sp.SourceID).Delete(&ServicePlan{}).Error
-}
-
-func (sp *ServicePlan) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attrs map[string]interface{}, r io.Reader) error {
-	err := sp.makeObject(attrs, r)
-	if err != nil {
-		log.Infof("Error creating a new service plan object %v", err)
-		return err
-	}
-	var instance ServicePlan
-	err = tx.Where(&ServicePlan{SourceID: sp.SourceID, Tower: base.Tower{SourceRef: sp.SourceRef}}).First(&instance).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Infof("Creating a new Survey Spec %s", sp.SourceRef)
-			if result := tx.Create(sp); result.Error != nil {
-				return fmt.Errorf("Error creating survey spec: %v" + result.Error.Error())
-			}
-		} else {
-			log.Infof("Error locating Survey Spec %s %v", sp.SourceRef, err)
-			return err
-		}
-	} else {
-		log.Infof("Survey Spec %s exists in DB with ID %d", sp.SourceRef, instance.ID)
-		sp.ID = instance.ID // Get the Existing ID for the object
-		instance.CreateJsonSchema = sp.CreateJsonSchema
-		instance.Description = sp.Description
-		instance.Name = sp.Name
-
-		log.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
-		err := tx.Save(&instance).Error
-		if err != nil {
-			log.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
-			return err
-		}
-	}
 	return nil
 }
