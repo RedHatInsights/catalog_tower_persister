@@ -113,6 +113,7 @@ func (gr *gormRepository) DeleteUnwanted(ctx context.Context, sc *ServiceCredent
 	}
 	return nil
 }
+
 func (sc *ServiceCredential) validateAttributes(attrs map[string]interface{}) error {
 	requiredAttrs := []string{"created",
 		"modified",

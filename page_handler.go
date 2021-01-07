@@ -50,6 +50,7 @@ type PageContext struct {
 	serviceinventoryrepo                 serviceinventory.Repository
 	serviceplanrepo                      serviceplan.Repository
 	serviceofferingrepo                  serviceoffering.Repository
+	serviceofferingnoderepo              serviceofferingnode.Repository
 }
 type PageResponse map[string]interface{}
 
@@ -70,6 +71,7 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 	pc.serviceinventoryrepo = serviceinventory.NewGORMRepository(dbTransaction)
 	pc.serviceplanrepo = serviceplan.NewGORMRepository(dbTransaction)
 	pc.serviceofferingrepo = serviceoffering.NewGORMRepository(dbTransaction)
+	pc.serviceofferingnoderepo = serviceofferingnode.NewGORMRepository(dbTransaction)
 	return &pc
 }
 
@@ -249,8 +251,8 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 
 	case "workflow_job_template_node":
 		son := &serviceofferingnode.ServiceOfferingNode{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = son.CreateOrUpdate(ctx, pc.dbTransaction, obj)
-		if err == serviceofferingnode.IgnoreTowerObject {
+		err = pc.serviceofferingnoderepo.CreateOrUpdate(ctx, son, obj)
+		if err == serviceofferingnode.ErrIgnoreTowerObject {
 			pc.glog.Info("Ignoring Tower Object")
 			return nil
 		} else if err != nil {
