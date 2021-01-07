@@ -91,7 +91,7 @@ func (si *ServiceInstance) CreateOrUpdate(ctx context.Context, tx *gorm.DB, attr
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Service Instance %s", si.SourceRef)
 			if result := tx.Create(si); result.Error != nil {
-				return fmt.Errorf("Error creating service instance : %v" + result.Error.Error())
+				return fmt.Errorf("Error creating service instance : %v", result.Error.Error())
 			}
 		} else {
 			log.Infof("Error locating Service Instance %s %v", si.SourceRef, err)

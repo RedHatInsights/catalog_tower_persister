@@ -131,7 +131,7 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, si *ServiceInvento
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Infof("Creating a new Inventory %s", si.SourceRef)
 			if result := gr.db.Create(si); result.Error != nil {
-				return fmt.Errorf("Error creating inventory : %v" + result.Error.Error())
+				return fmt.Errorf("Error creating inventory : %v", result.Error.Error())
 			}
 			gr.creates++
 		} else {

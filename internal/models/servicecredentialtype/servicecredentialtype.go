@@ -66,7 +66,7 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sct *ServiceCreden
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			logger.Infof("Creating a new Credential Type %s", sct.SourceRef)
 			if result := gr.db.Create(sct); result.Error != nil {
-				return fmt.Errorf("Error creating service credential type : %v" + result.Error.Error())
+				return fmt.Errorf("Error creating service credential type : %v", result.Error.Error())
 			}
 			gr.creates++
 		} else {

@@ -49,6 +49,7 @@ type PageContext struct {
 	servicecredentialtyperepo            servicecredentialtype.Repository
 	serviceinventoryrepo                 serviceinventory.Repository
 	serviceplanrepo                      serviceplan.Repository
+	serviceofferingrepo                  serviceoffering.Repository
 }
 type PageResponse map[string]interface{}
 
@@ -67,6 +68,8 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 	pc.servicecredentialrepo = servicecredential.NewGORMRepository(dbTransaction)
 	pc.servicecredentialtyperepo = servicecredentialtype.NewGORMRepository(dbTransaction)
 	pc.serviceinventoryrepo = serviceinventory.NewGORMRepository(dbTransaction)
+	pc.serviceplanrepo = serviceplan.NewGORMRepository(dbTransaction)
+	pc.serviceofferingrepo = serviceoffering.NewGORMRepository(dbTransaction)
 	return &pc
 }
 
@@ -213,7 +216,7 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":
 		so := &serviceoffering.ServiceOffering{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = so.CreateOrUpdate(ctx, pc.dbTransaction, obj)
+		err = pc.serviceofferingrepo.CreateOrUpdate(ctx, so, obj, pc.serviceplanrepo)
 		if err != nil {
 			pc.glog.Errorf("Error adding job template %s %v", so.SourceRef, err)
 			return err

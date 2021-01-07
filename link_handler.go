@@ -29,21 +29,21 @@ func (lh *LinkHandler) updateServiceNodeLink() error {
 	for _, w := range lh.PC.WorkflowNodes {
 		son := serviceofferingnode.ServiceOfferingNode{Tower: base.Tower{SourceRef: w.SourceRef}, TenantID: lh.PC.Tenant.ID, SourceID: lh.PC.Source.ID}
 		if result := lh.PC.dbTransaction.Where(&son).First(&son); result.Error != nil {
-			return fmt.Errorf("Error finding service offering node  %s : %v"+w.SourceRef, result.Error.Error())
+			return fmt.Errorf("Error finding service offering node  %s : %v", w.SourceRef, result.Error.Error())
 		}
 
 		so := serviceoffering.ServiceOffering{Tower: base.Tower{SourceRef: w.ServiceOfferingSourceRef}, TenantID: lh.PC.Tenant.ID, SourceID: lh.PC.Source.ID}
 		if result := lh.PC.dbTransaction.Where(&so).First(&so); result.Error != nil {
-			return fmt.Errorf("Error finding service offering %s : %v"+w.ServiceOfferingSourceRef, result.Error.Error())
+			return fmt.Errorf("Error finding service offering %s : %v", w.ServiceOfferingSourceRef, result.Error.Error())
 		}
 		rso := serviceoffering.ServiceOffering{Tower: base.Tower{SourceRef: w.RootServiceOfferingSourceRef}, TenantID: lh.PC.Tenant.ID, SourceID: lh.PC.Source.ID}
 		if result := lh.PC.dbTransaction.Where(&rso).First(&rso); result.Error != nil {
-			return fmt.Errorf("Error finding root service offering %s : %v"+w.RootServiceOfferingSourceRef, result.Error.Error())
+			return fmt.Errorf("Error finding root service offering %s : %v", w.RootServiceOfferingSourceRef, result.Error.Error())
 		}
 		son.ServiceOfferingID = sql.NullInt64{Int64: so.ID, Valid: true}
 		son.RootServiceOfferingID = sql.NullInt64{Int64: rso.ID, Valid: true}
 		if result := lh.PC.dbTransaction.Save(&son); result.Error != nil {
-			return fmt.Errorf("Error saving service offering node  %s : %v"+w.SourceRef, result.Error.Error())
+			return fmt.Errorf("Error saving service offering node  %s : %v", w.SourceRef, result.Error.Error())
 		}
 	}
 	return nil
@@ -63,14 +63,14 @@ func (lh *LinkHandler) setSurvey(sourceRef string) error {
 	sp := serviceplan.ServicePlan{Tower: base.Tower{SourceRef: sourceRef}, TenantID: lh.PC.Tenant.ID, SourceID: lh.PC.Source.ID}
 	so := serviceoffering.ServiceOffering{Tower: base.Tower{SourceRef: sourceRef}, TenantID: lh.PC.Tenant.ID, SourceID: lh.PC.Source.ID}
 	if result := lh.PC.dbTransaction.Where(&sp).First(&sp); result.Error != nil {
-		return fmt.Errorf("Error finding service plan %s : %v"+sourceRef, result.Error.Error())
+		return fmt.Errorf("Error finding service plan %s : %v", sourceRef, result.Error.Error())
 	}
 	if result := lh.PC.dbTransaction.Where(&so).First(&so); result.Error != nil {
-		return fmt.Errorf("Error finding service offering %s : %v"+sourceRef, result.Error.Error())
+		return fmt.Errorf("Error finding service offering %s : %v", sourceRef, result.Error.Error())
 	}
 	sp.ServiceOfferingID = sql.NullInt64{Int64: so.ID, Valid: true}
 	if result := lh.PC.dbTransaction.Save(&sp); result.Error != nil {
-		return fmt.Errorf("Error saving service plan %s : %v"+sourceRef, result.Error.Error())
+		return fmt.Errorf("Error saving service plan %s : %v", sourceRef, result.Error.Error())
 	}
 	return nil
 }

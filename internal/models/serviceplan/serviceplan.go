@@ -72,7 +72,7 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sp *ServicePlan, c
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Survey Spec %s", sp.SourceRef)
 			if result := gr.db.Create(sp); result.Error != nil {
-				return fmt.Errorf("Error creating survey spec: %v" + result.Error.Error())
+				return fmt.Errorf("Error creating survey spec: %v", result.Error.Error())
 			}
 		} else {
 			log.Infof("Error locating Survey Spec %s %v", sp.SourceRef, err)
