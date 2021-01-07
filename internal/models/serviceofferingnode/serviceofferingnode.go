@@ -109,7 +109,7 @@ func (son *ServiceOfferingNode) CreateOrUpdate(ctx context.Context, tx *gorm.DB,
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.Infof("Creating a new Service Offering Node %s", son.SourceRef)
 			if result := tx.Create(son); result.Error != nil {
-				return fmt.Errorf("Error creating service offering node : %v" + result.Error.Error())
+				return fmt.Errorf("Error creating service offering node : %v", result.Error.Error())
 			}
 		} else {
 			log.Infof("Error locating Service Offering Node %s %v", son.SourceRef, err)
