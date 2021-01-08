@@ -12,7 +12,6 @@ import (
 	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/servicecredential"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/servicecredentialtype"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinstance"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceoffering"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceofferingnode"
@@ -284,13 +283,6 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		err = pc.servicecredentialtyperepo.CreateOrUpdate(ctx, sct, obj)
 		if err != nil {
 			pc.glog.Errorf("Error adding survey credential type %s", sct.SourceRef)
-			return err
-		}
-	case "job":
-		si := &serviceinstance.ServiceInstance{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = si.CreateOrUpdate(ctx, pc.dbTransaction, obj)
-		if err != nil {
-			pc.glog.Errorf("Error adding service instance type %s", si.SourceRef)
 			return err
 		}
 	case "survey_spec":
