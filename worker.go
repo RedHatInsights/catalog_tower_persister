@@ -226,7 +226,7 @@ func (inv *InventoryContext) updateSource(db DatabaseContext, sourceID int64, st
 
 func (inv *InventoryContext) updateTask(state, status, msg string) error {
 	data := map[string]interface{}{"status": status, "state": state, "message": msg}
-	err := inv.catalogTask.Update(data)
+	err := inv.catalogTask.Update(data, &http.Client{})
 	if err != nil {
 		log.Errorf("Error updating catalog task %v", err)
 		return err

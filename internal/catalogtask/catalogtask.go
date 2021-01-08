@@ -11,8 +11,9 @@ import (
 	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 )
 
+// CatalogTask interface to update the Task object in cloud.redhat.com
 type CatalogTask interface {
-	Update(data map[string]interface{}) error
+	Update(data map[string]interface{}, client *http.Client) error
 }
 
 type defaultCatalogTask struct {
@@ -22,37 +23,39 @@ type defaultCatalogTask struct {
 	headers map[string]string
 }
 
-const X_RH_IDENTITY_KEY = "x-rh-identity"
-const X_RH_INSIGHTS_REQUEST_ID_KEY = "x-rh-insights-request-id"
+const xRHIdentity = "x-rh-identity"
+const xRHInsightsRequestID = "x-rh-insights-request-id"
 
+// MakeCatalogTask creates a new Catalog Task object
 func MakeCatalogTask(ctx context.Context, url string, headers map[string]string) CatalogTask {
 	glog := logger.GetLogger(ctx)
 
 	return &defaultCatalogTask{ctx: ctx, url: url, glog: glog, headers: headers}
 }
 
-func (ct *defaultCatalogTask) Update(data map[string]interface{}) error {
+// Update the Task object in the cloud
+func (ct *defaultCatalogTask) Update(data map[string]interface{}, client *http.Client) error {
 	payload, err := json.Marshal(data)
 
 	if err != nil {
 		ct.glog.Errorf("Error Marshaling Payload %v", err)
 		return err
 	}
-	client := &http.Client{}
+	//client := &http.Client{}
 	req, err := http.NewRequest(http.MethodPatch, ct.url, bytes.NewBuffer(payload))
 	if err != nil {
 		ct.glog.Errorf("Error creating a new request %v", err)
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if _, ok := ct.headers[X_RH_IDENTITY_KEY]; !ok {
+	if _, ok := ct.headers[xRHIdentity]; !ok {
 		err = fmt.Errorf("X_RH_IDENTITY is not set message headers")
 		ct.glog.Errorf("%v", err)
 		return err
 	}
-	req.Header.Set(X_RH_IDENTITY_KEY, ct.headers[X_RH_IDENTITY_KEY])
-	if val, ok := ct.headers[X_RH_INSIGHTS_REQUEST_ID_KEY]; ok {
-		req.Header.Set(X_RH_INSIGHTS_REQUEST_ID_KEY, val)
+	req.Header.Set(xRHIdentity, ct.headers[xRHIdentity])
+	if val, ok := ct.headers[xRHInsightsRequestID]; ok {
+		req.Header.Set(xRHInsightsRequestID, val)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -65,7 +68,7 @@ func (ct *defaultCatalogTask) Update(data map[string]interface{}) error {
 		ct.glog.Errorf("Error reading body %v", err)
 		return err
 	}
-	if resp.StatusCode != 204 {
+	if resp.StatusCode != http.StatusNoContent {
 		err = fmt.Errorf("Invalid HTTP Status code from post %d", resp.StatusCode)
 		ct.glog.Errorf("Error %v", err)
 		return err
