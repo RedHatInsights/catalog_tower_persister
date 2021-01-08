@@ -3,11 +3,12 @@ package spec2ddf
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 )
 
-type DDFField struct {
+type ddfField struct {
 	Name         string                   `json:"name"`
 	Label        string                   `json:"label"`
 	Component    string                   `json:"component"`
@@ -21,7 +22,7 @@ type DDFField struct {
 	Multi        bool                     `json:"multi,omitempty"`
 }
 
-type Field struct {
+type field struct {
 	QuestionName        string      `json:"question_name"`
 	QuestionDescription string      `json:"question_description"`
 	Required            bool        `json:"required"`
@@ -33,27 +34,29 @@ type Field struct {
 	Choices             interface{} `json:"choices"`
 }
 
-type SurveySpec struct {
+type surveySpec struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	Fields      []Field `json:"spec"`
+	Fields      []field `json:"spec"`
 }
 
-type DDFSchema struct {
+type ddfSchema struct {
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
-	Fields      []DDFField `json:"fields"`
+	Fields      []ddfField `json:"fields"`
 }
 
-type DDFSpec struct {
-	Schema     DDFSchema `json:"schema"`
+type ddfSpec struct {
+	Schema     ddfSchema `json:"schema"`
 	SchemaType string    `json:"schemaType"`
 }
 
+// Converter used to convert SPEC from Ansible tower to DDF
 type Converter struct{}
 
+// Convert will transform a Tower Survey Spec to the DDF format
 func (sc *Converter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
-	var ss SurveySpec
+	var ss surveySpec
 	decoder := json.NewDecoder(r)
 	decoder.UseNumber()
 	err := decoder.Decode(&ss)
@@ -61,8 +64,8 @@ func (sc *Converter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 
-	var ddfs DDFSpec
-	var ddfSchema DDFSchema
+	var ddfs ddfSpec
+	var ddfSchema ddfSchema
 	ddfs.SchemaType = "default"
 
 	for _, f := range ss.Fields {
@@ -79,84 +82,86 @@ func (sc *Converter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
 	return json.Marshal(&ddfs)
 }
 
-func getDDFField(field *Field) (*DDFField, error) {
-	ddff := DDFField{Label: field.QuestionName,
-		Name:         field.Variable,
-		InitialValue: field.Default,
-		HelperText:   field.QuestionDescription,
-		IsRequired:   field.Required}
-	ddff.Validate = getValidateArray(field)
-	opts := getOptions(field)
+func getDDFField(f *field) (*ddfField, error) {
+	ddff := ddfField{Label: f.QuestionName,
+		Name:         f.Variable,
+		InitialValue: f.Default,
+		HelperText:   f.QuestionDescription,
+		IsRequired:   f.Required}
+	ddff.Validate = getValidateArray(f)
+	opts := getOptions(f)
 	if opts != nil {
 		ddff.Options = opts
 	}
-	if field.Type == "multiplechoice" {
+	if f.Type == "multiplechoice" {
 		ddff.Component = "select-field"
-	} else if field.Type == "multiselect" {
+	} else if f.Type == "multiselect" {
 		ddff.Component = "select-field"
 		ddff.Multi = true
-	} else if field.Type == "text" {
+	} else if f.Type == "text" {
 		ddff.Component = "text-field"
-	} else if field.Type == "integer" {
+	} else if f.Type == "integer" {
 		ddff.Type = "number"
 		ddff.DataType = "integer"
-	} else if field.Type == "float" {
+	} else if f.Type == "float" {
 		ddff.Type = "number"
 		ddff.DataType = "float"
-	} else if field.Type == "password" {
+	} else if f.Type == "password" {
 		ddff.Type = "password"
 		ddff.Component = "text-field"
-	} else if field.Type == "textarea" {
+	} else if f.Type == "textarea" {
 		ddff.Component = "textarea-field"
+	} else {
+		return nil, fmt.Errorf("Unsupported field type %s", f.Type)
 	}
 
 	return &ddff, nil
 }
 
-func getValidateArray(field *Field) []map[string]interface{} {
+func getValidateArray(f *field) []map[string]interface{} {
 
 	var result []map[string]interface{}
-	if field.Required {
+	if f.Required {
 		result = append(result, map[string]interface{}{"type": "required-validator"})
 	}
 
-	switch field.Min.(type) {
+	switch f.Min.(type) {
 	case json.Number:
-		if field.Type == "text" || field.Type == "password" || field.Type == "textarea" {
+		if f.Type == "text" || f.Type == "password" || f.Type == "textarea" {
 			result = append(result, map[string]interface{}{"type": "min-length-validator",
-				"threshold": field.Min.(json.Number)})
-		} else if field.Type == "integer" || field.Type == "float" {
+				"threshold": f.Min.(json.Number)})
+		} else if f.Type == "integer" || f.Type == "float" {
 			result = append(result, map[string]interface{}{"type": "min-number-value",
-				"value": field.Min.(json.Number)})
+				"value": f.Min.(json.Number)})
 		}
 	}
 
-	switch field.Max.(type) {
+	switch f.Max.(type) {
 	case json.Number:
-		if field.Type == "text" || field.Type == "password" || field.Type == "textarea" {
+		if f.Type == "text" || f.Type == "password" || f.Type == "textarea" {
 			result = append(result, map[string]interface{}{"type": "max-length-validator",
-				"threshold": field.Max.(json.Number)})
-		} else if field.Type == "integer" || field.Type == "float" {
+				"threshold": f.Max.(json.Number)})
+		} else if f.Type == "integer" || f.Type == "float" {
 			result = append(result, map[string]interface{}{"type": "max-number-value",
-				"value": field.Max.(json.Number)})
+				"value": f.Max.(json.Number)})
 		}
 	}
 
 	return result
 }
 
-func getOptions(field *Field) []map[string]interface{} {
+func getOptions(f *field) []map[string]interface{} {
 	var result []map[string]interface{}
 	var values []string
-	switch field.Choices.(type) {
+	switch f.Choices.(type) {
 	case string:
-		value := field.Choices.(string)
+		value := f.Choices.(string)
 		if value == "" {
 			return nil
 		}
 		values = strings.Split(value, "\n")
 	case []string:
-		values = field.Choices.([]string)
+		values = f.Choices.([]string)
 	default:
 		return nil
 	}
