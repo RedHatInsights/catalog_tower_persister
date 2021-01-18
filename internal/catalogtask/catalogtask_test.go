@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -51,8 +51,7 @@ var headers = map[string]string{
 
 func TestUpdateSuccess(t *testing.T) {
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
-	ctask := MakeCatalogTask(nctx, url, headers)
+	ctask := MakeCatalogTask(ctx, testhelper.TestLogger(), url, headers)
 	body := []string{"Created"}
 	fc := fakeClient(t, body, http.StatusNoContent)
 	err := ctask.Update(data, fc)
@@ -61,11 +60,10 @@ func TestUpdateSuccess(t *testing.T) {
 
 func TestUpdateMissingHeaders(t *testing.T) {
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	headers := map[string]string{
 		"abc": "id",
 	}
-	ctask := MakeCatalogTask(nctx, url, headers)
+	ctask := MakeCatalogTask(ctx, testhelper.TestLogger(), url, headers)
 	body := []string{"Created"}
 	fc := fakeClient(t, body, http.StatusNoContent)
 	err := ctask.Update(data, fc)
@@ -78,8 +76,7 @@ func TestUpdateMissingHeaders(t *testing.T) {
 
 func TestUpdateBadStatus(t *testing.T) {
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
-	ctask := MakeCatalogTask(nctx, url, headers)
+	ctask := MakeCatalogTask(ctx, testhelper.TestLogger(), url, headers)
 	body := []string{"Error Body"}
 	fc := fakeClient(t, body, http.StatusBadRequest)
 	err := ctask.Update(data, fc)

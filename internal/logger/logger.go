@@ -1,45 +1,124 @@
 package logger
 
 import (
-	"context"
-	"fmt"
+	"bytes"
+	"encoding/json"
+	"flag"
+	"os"
+	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/RedHatInsights/catalog_tower_persister/config"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	lc "github.com/redhatinsights/platform-go-middlewares/logging/cloudwatch"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 )
 
-type Logger string
+// Log is an instance of the global logrus.Logger
+var Log *logrus.Logger
+var logLevel logrus.Level
 
-const loggerID = "logger_id"
+// NewCloudwatchFormatter creates a new log formatter
+func NewCloudwatchFormatter() *CustomCloudwatch {
+	f := &CustomCloudwatch{}
 
-func (l Logger) Printf(s string, args ...interface{}) {
-	log.Printf("[id=%s] %s", l, fmt.Sprintf(s, args...))
+	var err error
+	if f.Hostname == "" {
+		if f.Hostname, err = os.Hostname(); err != nil {
+			f.Hostname = "unknown"
+		}
+	}
+
+	return f
 }
 
-func (l Logger) Println(s string) {
-	log.Printf("[id=%s] %s", l, s)
+//Format is the log formatter for the entry
+func (f *CustomCloudwatch) Format(entry *logrus.Entry) ([]byte, error) {
+	b := &bytes.Buffer{}
+
+	now := time.Now()
+
+	hostname, err := os.Hostname()
+	if err == nil {
+		f.Hostname = hostname
+	}
+
+	data := map[string]interface{}{
+		"@timestamp":  now.Format("2006-01-02T15:04:05.999Z"),
+		"@version":    1,
+		"message":     entry.Message,
+		"levelname":   entry.Level.String(),
+		"source_host": f.Hostname,
+		"app":         "catalog_tower_persister",
+		"caller":      entry.Caller.Func.Name(),
+	}
+
+	for k, v := range entry.Data {
+		switch v := v.(type) {
+		case error:
+			data[k] = v.Error()
+		case Marshaler:
+			data[k] = v.MarshalLog()
+		default:
+			data[k] = v
+		}
+	}
+
+	j, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	b.Write(j)
+
+	return b.Bytes(), nil
 }
 
-func (l Logger) Infof(s string, args ...interface{}) {
-	x := fmt.Sprintf(s, args...)
-	log.Infof("[id=%s] %s", l, x)
-}
+// InitLogger initializes the Entitlements API logger
+func InitLogger() *logrus.Logger {
 
-func (l Logger) Info(s string) {
-	log.Infof("[id=%s] %s", l, s)
-}
+	cfg := config.Get()
+	logconfig := viper.New()
+	key := cfg.AwsAccessKeyId
+	secret := cfg.AwsSecretAccessKey
+	region := cfg.AwsRegion
+	group := cfg.LogGroup
+	stream := cfg.Hostname
+	logconfig.SetEnvPrefix("TOWER_PERSISTER")
+	logconfig.AutomaticEnv()
 
-func (l Logger) Errorf(s string, args ...interface{}) {
-	log.Errorf("[id=%s] %s", l, fmt.Sprintf(s, args...))
-}
+	switch cfg.LogLevel {
+	case "DEBUG":
+		logLevel = logrus.DebugLevel
+	case "ERROR":
+		logLevel = logrus.ErrorLevel
+	default:
+		logLevel = logrus.InfoLevel
+	}
+	if flag.Lookup("test.v") != nil {
+		logLevel = logrus.FatalLevel
+	}
 
-func (l Logger) Error(s string) {
-	log.Errorf("[id=%s] %s", l, s)
-}
+	formatter := NewCloudwatchFormatter()
 
-func CtxWithLoggerID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, loggerID, id)
-}
+	Log = &logrus.Logger{
+		Out:          os.Stdout,
+		Level:        logLevel,
+		Formatter:    formatter,
+		Hooks:        make(logrus.LevelHooks),
+		ReportCaller: true,
+	}
 
-func GetLogger(ctx context.Context) Logger {
-	return Logger(ctx.Value(loggerID).(string))
+	if key != "" {
+		cred := credentials.NewStaticCredentials(key, secret, "")
+		awsconf := aws.NewConfig().WithRegion(region).WithCredentials(cred)
+		hook, err := lc.NewBatchingHook(group, stream, awsconf, 10*time.Second)
+		if err != nil {
+			Log.Info(err)
+		}
+		Log.Hooks.Add(hook)
+	}
+
+	return Log
 }

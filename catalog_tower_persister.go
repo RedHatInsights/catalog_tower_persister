@@ -8,11 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"sync"
 	"syscall"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/RedHatInsights/catalog_tower_persister/config"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -22,21 +22,23 @@ type DatabaseContext struct {
 }
 
 func main() {
-	go http.ListenAndServe(":7070", http.DefaultServeMux)
-	logFileName := "/tmp/catalog_tower_persister" + strconv.Itoa(os.Getpid()) + ".log"
-	logf, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	if err != nil {
-		log.Fatalf("error opening log file: %v", err)
-	}
-
-	defer logf.Close()
+	cfg := config.Get()
+	log := logger.InitLogger()
+	log.Info("Starting Catalog Tower Persister")
+	httpServer := fmt.Sprintf("::%d", cfg.WebPort)
+	go http.ListenAndServe(httpServer, http.DefaultServeMux)
 	defer log.Info("Finished Catalog Worker")
 
 	expvar.Publish("goroutines", expvar.Func(func() interface{} {
 		return fmt.Sprintf("%d", runtime.NumGoroutine())
 	}))
-	log.SetOutput(logf)
-	dsn := os.Getenv("DATABASE_URL")
+
+	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable",
+		cfg.DatabaseUsername,
+		cfg.DatabasePassword,
+		cfg.DatabaseHostname,
+		cfg.DatabasePort,
+		cfg.DatabaseName)
 	if dsn == "" {
 		panic("DATABASE_URL environment variable not set")
 	}
@@ -55,7 +57,7 @@ func main() {
 	dbContext := DatabaseContext{DB: db}
 
 	workerGroup.Add(1)
-	go startKafkaListener(dbContext, shutdown, &workerGroup)
+	go startKafkaListener(dbContext, log, shutdown, &workerGroup)
 	go func() {
 		sig := <-sigs
 		fmt.Println()

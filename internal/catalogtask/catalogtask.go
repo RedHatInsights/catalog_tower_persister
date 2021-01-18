@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
+	"github.com/sirupsen/logrus"
 )
 
 // CatalogTask interface to update the Task object in cloud.redhat.com
@@ -19,7 +19,7 @@ type CatalogTask interface {
 type defaultCatalogTask struct {
 	url     string
 	ctx     context.Context
-	glog    logger.Logger
+	logger  *logrus.Entry
 	headers map[string]string
 }
 
@@ -27,10 +27,8 @@ const xRHIdentity = "x-rh-identity"
 const xRHInsightsRequestID = "x-rh-insights-request-id"
 
 // MakeCatalogTask creates a new Catalog Task object
-func MakeCatalogTask(ctx context.Context, url string, headers map[string]string) CatalogTask {
-	glog := logger.GetLogger(ctx)
-
-	return &defaultCatalogTask{ctx: ctx, url: url, glog: glog, headers: headers}
+func MakeCatalogTask(ctx context.Context, logger *logrus.Entry, url string, headers map[string]string) CatalogTask {
+	return &defaultCatalogTask{ctx: ctx, url: url, logger: logger, headers: headers}
 }
 
 // Update the Task object in the cloud
@@ -38,19 +36,19 @@ func (ct *defaultCatalogTask) Update(data map[string]interface{}, client *http.C
 	payload, err := json.Marshal(data)
 
 	if err != nil {
-		ct.glog.Errorf("Error Marshaling Payload %v", err)
+		ct.logger.Errorf("Error Marshaling Payload %v", err)
 		return err
 	}
 	//client := &http.Client{}
 	req, err := http.NewRequest(http.MethodPatch, ct.url, bytes.NewBuffer(payload))
 	if err != nil {
-		ct.glog.Errorf("Error creating a new request %v", err)
+		ct.logger.Errorf("Error creating a new request %v", err)
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if _, ok := ct.headers[xRHIdentity]; !ok {
 		err = fmt.Errorf("X_RH_IDENTITY is not set message headers")
-		ct.glog.Errorf("%v", err)
+		ct.logger.Errorf("%v", err)
 		return err
 	}
 	req.Header.Set(xRHIdentity, ct.headers[xRHIdentity])
@@ -59,22 +57,22 @@ func (ct *defaultCatalogTask) Update(data map[string]interface{}, client *http.C
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		ct.glog.Errorf("Error processing request %v", err)
+		ct.logger.Errorf("Error processing request %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		ct.glog.Errorf("Error reading body %v", err)
+		ct.logger.Errorf("Error reading body %v", err)
 		return err
 	}
 	if resp.StatusCode != http.StatusNoContent {
 		err = fmt.Errorf("Invalid HTTP Status code from post %d", resp.StatusCode)
-		ct.glog.Errorf("Error %v", err)
+		ct.logger.Errorf("Error %v", err)
 		return err
 	}
-	ct.glog.Infof("Task Update Statue Code %d", resp.StatusCode)
+	ct.logger.Infof("Task Update Statue Code %d", resp.StatusCode)
 
-	ct.glog.Infof("Response from Patch %s", string(body))
+	ct.logger.Infof("Response from Patch %s", string(body))
 	return nil
 }

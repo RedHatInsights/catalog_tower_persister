@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -206,9 +206,8 @@ var specTests = []struct {
 func TestSpec(t *testing.T) {
 	for _, tt := range specTests {
 		ctx := context.TODO()
-		nctx := logger.CtxWithLoggerID(ctx, "12345")
 		c := &Converter{}
-		b, err := c.Convert(nctx, strings.NewReader(tt.data))
+		b, err := c.Convert(ctx, testhelper.TestLogger(), strings.NewReader(tt.data))
 		if len(tt.errMsg) == 0 {
 			assert.Equal(t, strings.Contains(string(b), tt.ddfMatch), true, tt.ddfMatch)
 			assert.Nil(t, err, tt.name)

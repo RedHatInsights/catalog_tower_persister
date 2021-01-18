@@ -1,0 +1,94 @@
+---
+apiVersion: v1
+kind: Template
+metadata:
+  name: catalog-tower-persister
+objects:
+- apiVersion: cloud.redhat.com/v1alpha1
+  kind: ClowdApp
+  metadata:
+    name: catalog-tower-persister
+  spec:
+    envName: ${ENV_NAME}
+    pods:
+    - name: service
+      image: ${IMAGE}:${IMAGE_TAG}
+      minReplicas: ${{MIN_REPLICAS}}
+      livenessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /expvar
+          port: 8000
+          scheme: HTTP
+        initialDelaySeconds: 35
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 120
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          path: /
+          port: 8000
+          scheme: HTTP
+        initialDelaySeconds: 35
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 120
+      env:
+      - name: DATABASE_HOST
+        value: ${DATABASE_HOST}
+      - name: DATABASE_PORT
+        value: ${DATABASE_PORT}
+      - name: DATABASE_USER
+        value: ${DATABASE_USER}
+      - name: DATABASE_PASSWORD
+        value: ${DATABASE_PASSWORD}
+      - name: DATABASE_NAME
+        value: ${DATABASE_NAME}
+      - name: LOG_LEVEL
+        value: ${LOG_LEVEL}
+      - name: CLOWDER_ENABLED
+        value: ${CLOWDER_ENABLED}
+      resources:
+        limits:
+          cpu: ${CPU_LIMIT}
+          memory: ${MEMORY_LIMIT}
+        requests:
+          cpu: 200m
+          memory: 256Mi
+      web: true
+      volumes:
+      - emptyDir: {}
+        name: tmpdir
+      volumeMounts:
+      - mountPath: /tmp
+        name: tmpdir
+    kafkaTopics:
+    - replicas: 3
+      partitions: 64
+      topicName: platform.catalog.persister
+parameters:
+- name: DATABASE_NAME
+  value: catalog-inventory-api
+- name: LOG_LEVEL
+  value: INFO
+- description: Cpu limit of service
+  name: CPU_LIMIT
+  value: 500m
+- description: memory limit of service
+  name: MEMORY_LIMIT
+  value: 512Mi
+- name: MIN_REPLICAS
+  value: '1'
+- description: Image tag
+  name: IMAGE_TAG
+  required: true
+- description: Image name
+  name: IMAGE
+  value: quay.io/cloudservices/catalog-tower-persister
+- description: Determines Clowder deployment
+  name: CLOWDER_ENABLED
+  value: "True"
+- description: ClowdEnv Name
+  name: ENV_NAME
+  requred: false

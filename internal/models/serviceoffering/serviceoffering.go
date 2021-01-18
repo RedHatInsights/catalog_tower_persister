@@ -9,11 +9,11 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceofferingicon"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceplan"
+	"github.com/sirupsen/logrus"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -40,8 +40,8 @@ type ServiceOffering struct {
 
 // Repository interface supports deleted unwanted objects and creating or updating object
 type Repository interface {
-	DeleteUnwanted(ctx context.Context, so *ServiceOffering, keepSourceRefs []string, spr serviceplan.Repository) error
-	CreateOrUpdate(ctx context.Context, so *ServiceOffering, attrs map[string]interface{}, spr serviceplan.Repository) error
+	DeleteUnwanted(ctx context.Context, logger *logrus.Entry, so *ServiceOffering, keepSourceRefs []string, spr serviceplan.Repository) error
+	CreateOrUpdate(ctx context.Context, logger *logrus.Entry, so *ServiceOffering, attrs map[string]interface{}, spr serviceplan.Repository) error
 	Stats() map[string]int
 }
 
@@ -63,84 +63,82 @@ func (gr *gormRepository) Stats() map[string]int {
 	return map[string]int{"adds": gr.creates, "updates": gr.updates, "deletes": gr.deletes}
 }
 
-func (gr *gormRepository) CreateOrUpdate(ctx context.Context, so *ServiceOffering, attrs map[string]interface{}, spr serviceplan.Repository) error {
-	log := logger.GetLogger(ctx)
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, so *ServiceOffering, attrs map[string]interface{}, spr serviceplan.Repository) error {
 	err := so.makeObject(attrs)
 	if err != nil {
-		log.Infof("Error creating a new service offering object %v", err)
+		logger.Infof("Error creating a new service offering object %v", err)
 		return err
 	}
-	instance, err := so.getInstance(ctx, gr.db)
+	instance, err := so.getInstance(ctx, logger, gr.db)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Infof("Creating a new Job Template %s", so.SourceRef)
+			logger.Infof("Creating a new Job Template %s", so.SourceRef)
 			if result := gr.db.Create(so); result.Error != nil {
 				return fmt.Errorf("Error creating job template: %v", result.Error.Error())
 			}
 		} else {
-			log.Errorf("Error locating job template  %s %v", so.SourceRef, err)
+			logger.Errorf("Error locating job template  %s %v", so.SourceRef, err)
 			return err
 		}
 		gr.creates++
 	} else {
-		log.Infof("Job Template %s exists in DB with ID %d", so.SourceRef, instance.ID)
+		logger.Infof("Job Template %s exists in DB with ID %d", so.SourceRef, instance.ID)
 		so.ID = instance.ID // Get the Existing ID for the object
 
 		if !instance.equal(so) {
-			log.Infof("Updating Job Template %s exists in DB with ID %d", so.SourceRef, instance.ID)
+			logger.Infof("Updating Job Template %s exists in DB with ID %d", so.SourceRef, instance.ID)
 			instance.Name = so.Name
 			instance.Description = so.Description
 			instance.ServiceInventory = serviceinventory.ServiceInventory{}
 			if !so.SurveyEnabled && instance.SurveyEnabled {
-				log.Infof("Deleting Service Plan for Job Template %s", so.SourceRef)
+				logger.Infof("Deleting Service Plan for Job Template %s", so.SourceRef)
 				// Delete the Service Plan if any that is connected to this ServiceOffering
-				err := so.deleteServicePlan(ctx, spr)
+				err := so.deleteServicePlan(ctx, logger, spr)
 				if err != nil {
-					log.Errorf("Error deleting Service Plan for Service Offering %d %s %v", so.ID, so.SourceRef, err)
+					logger.Errorf("Error deleting Service Plan for Service Offering %d %s %v", so.ID, so.SourceRef, err)
 					return err
 				}
 			}
-			log.Infof("Saving Job Template source ref %s", so.SourceRef)
+			logger.Infof("Saving Job Template source ref %s", so.SourceRef)
 			err := gr.db.Save(&instance).Error
 			if err != nil {
-				log.Errorf("Error Updating Service Offering %s", so.SourceRef)
+				logger.Errorf("Error Updating Service Offering %s", so.SourceRef)
 				return err
 			}
 			gr.updates++
 		} else {
-			log.Infof("Job Template %s is in sync with Tower", so.SourceRef)
+			logger.Infof("Job Template %s is in sync with Tower", so.SourceRef)
 		}
 	}
 	return nil
 }
 
-func (gr *gormRepository) DeleteUnwanted(ctx context.Context, so *ServiceOffering, keepSourceRefs []string, spr serviceplan.Repository) error {
-	log := logger.GetLogger(ctx)
-	results, err := so.getDeleteIDs(ctx, gr.db, keepSourceRefs)
+func (gr *gormRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, so *ServiceOffering, keepSourceRefs []string, spr serviceplan.Repository) error {
+	results, err := so.getDeleteIDs(ctx, logger, gr.db, keepSourceRefs)
 	if err != nil {
-		log.Errorf("Error getting Delete IDs for service offerings %v", err)
+		logger.Errorf("Error getting Delete IDs for service offerings %v", err)
 		return err
 	}
 	for _, res := range results {
-		log.Infof("Attempting to delete ServiceOffering with ID %d Source ref %s", res.ID, res.SourceRef)
+		logger.Infof("Attempting to delete ServiceOffering with ID %d Source ref %s", res.ID, res.SourceRef)
 
 		dso := &ServiceOffering{SourceID: so.SourceID, TenantID: so.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}
-		instance, err := dso.getInstance(ctx, gr.db)
+		instance, err := dso.getInstance(ctx, logger, gr.db)
 		if err != nil {
-			log.Errorf("Error fetching service offering instance %v", err)
+			logger.Errorf("Error fetching service offering instance %v", err)
 			return err
 		}
 		result := gr.db.Delete(dso, res.ID)
 		if result.Error != nil {
-			log.Errorf("Error deleting Service Offering %d %s %v", res.ID, res.SourceRef, result.Error)
+			logger.Errorf("Error deleting Service Offering %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
 		}
 		gr.deletes++
 		// Delete the Service Plan if any that is connected to this ServiceOffering
 		if instance.SurveyEnabled {
-			err = dso.deleteServicePlan(ctx, spr)
+			err = dso.deleteServicePlan(ctx, logger, spr)
 			if err != nil {
-				log.Errorf("Error deleting Service Plan for Service Offering %d %s %v", res.ID, res.SourceRef, err)
+				logger.Errorf("Error deleting Service Plan for Service Offering %d %s %v", res.ID, res.SourceRef, err)
 				return err
 			}
 		}
@@ -148,9 +146,9 @@ func (gr *gormRepository) DeleteUnwanted(ctx context.Context, so *ServiceOfferin
 	return nil
 }
 
-func (so *ServiceOffering) deleteServicePlan(ctx context.Context, spr serviceplan.Repository) error {
+func (so *ServiceOffering) deleteServicePlan(ctx context.Context, logger *logrus.Entry, spr serviceplan.Repository) error {
 	sp := serviceplan.ServicePlan{SourceID: so.SourceID, TenantID: so.TenantID, Tower: base.Tower{SourceRef: so.SourceRef}}
-	return spr.Delete(ctx, &sp)
+	return spr.Delete(ctx, logger, &sp)
 }
 
 func (so *ServiceOffering) validateAttributes(attrs map[string]interface{}) error {
@@ -234,14 +232,13 @@ func (so *ServiceOffering) equal(other *ServiceOffering) bool {
 
 }
 
-func (so *ServiceOffering) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
-	log := logger.GetLogger(ctx)
+func (so *ServiceOffering) getDeleteIDs(ctx context.Context, logger *logrus.Entry, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
 	var result []base.ResultIDRef
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(keepSourceRefs)
 	length := len(keepSourceRefs)
 	if err := tx.Table("service_offerings").Select("id, source_ref").Where("source_id = ? AND archived_at IS NULL", so.SourceID).Scan(&result).Error; err != nil {
-		log.Errorf("Error fetching ServiceOffering %v", err)
+		logger.Errorf("Error fetching ServiceOffering %v", err)
 		return deleteResultIDRef, err
 	}
 	for _, res := range result {
@@ -252,9 +249,8 @@ func (so *ServiceOffering) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSo
 	return deleteResultIDRef, nil
 }
 
-func (so *ServiceOffering) getInstance(ctx context.Context, db *gorm.DB) (*ServiceOffering, error) {
+func (so *ServiceOffering) getInstance(ctx context.Context, logger *logrus.Entry, db *gorm.DB) (*ServiceOffering, error) {
 	var instance ServiceOffering
-	log := logger.GetLogger(ctx)
 	err := db.Preload("ServiceInventory").Where(&ServiceOffering{SourceID: so.SourceID, Tower: base.Tower{SourceRef: so.SourceRef}}).First(&instance).Error
 	if err != nil {
 		return nil, err
@@ -262,7 +258,7 @@ func (so *ServiceOffering) getInstance(ctx context.Context, db *gorm.DB) (*Servi
 	var resp map[string]interface{}
 	err = json.Unmarshal(instance.Extra, &resp)
 	if err != nil {
-		log.Errorf("Error parsing extra in service offering source ref %s", so.SourceRef)
+		logger.Errorf("Error parsing extra in service offering source ref %s", so.SourceRef)
 		return nil, err
 	}
 	instance.SurveyEnabled = resp["survey_enabled"].(bool)

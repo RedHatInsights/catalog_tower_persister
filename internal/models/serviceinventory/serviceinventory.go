@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
+	"github.com/sirupsen/logrus"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -17,8 +17,8 @@ import (
 
 // Repository interface supports deleted unwanted objects and creating or updating object
 type Repository interface {
-	DeleteUnwanted(ctx context.Context, sc *ServiceInventory, keepSourceRefs []string) error
-	CreateOrUpdate(ctx context.Context, sc *ServiceInventory, attrs map[string]interface{}) error
+	DeleteUnwanted(ctx context.Context, logger *logrus.Entry, sc *ServiceInventory, keepSourceRefs []string) error
+	CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sc *ServiceInventory, attrs map[string]interface{}) error
 	Stats() map[string]int
 }
 
@@ -118,8 +118,7 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (gr *gormRepository) CreateOrUpdate(ctx context.Context, si *ServiceInventory, attrs map[string]interface{}) error {
-	logger := logger.GetLogger(ctx)
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, si *ServiceInventory, attrs map[string]interface{}) error {
 	err := si.makeObject(attrs)
 	if err != nil {
 		logger.Infof("Error creating a new service inventory object %v", err)
@@ -160,9 +159,8 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, si *ServiceInvento
 // DeleteUnwanted deletes any objects not listed in the keepSourceRefs
 // This is used to delete ServiceInventory that exist in our database but have been
 // deleted from the Ansible Tower
-func (gr *gormRepository) DeleteUnwanted(ctx context.Context, si *ServiceInventory, keepSourceRefs []string) error {
-	logger := logger.GetLogger(ctx)
-	results, err := si.getDeleteIDs(ctx, gr.db, keepSourceRefs)
+func (gr *gormRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, si *ServiceInventory, keepSourceRefs []string) error {
+	results, err := si.getDeleteIDs(ctx, logger, gr.db, keepSourceRefs)
 	if err != nil {
 		logger.Errorf("Error getting Delete IDs for service inventories %v", err)
 		return err
@@ -179,8 +177,7 @@ func (gr *gormRepository) DeleteUnwanted(ctx context.Context, si *ServiceInvento
 	return nil
 }
 
-func (si *ServiceInventory) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
-	logger := logger.GetLogger(ctx)
+func (si *ServiceInventory) getDeleteIDs(ctx context.Context, logger *logrus.Entry, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
 	var result []base.ResultIDRef
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(keepSourceRefs)

@@ -9,10 +9,10 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceoffering"
+	"github.com/sirupsen/logrus"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -45,8 +45,8 @@ type ServiceOfferingNode struct {
 
 // Repository interface supports deleted unwanted objects and creating or updating object
 type Repository interface {
-	DeleteUnwanted(ctx context.Context, so *ServiceOfferingNode, keepSourceRefs []string) error
-	CreateOrUpdate(ctx context.Context, so *ServiceOfferingNode, attrs map[string]interface{}) error
+	DeleteUnwanted(ctx context.Context, logger *logrus.Entry, so *ServiceOfferingNode, keepSourceRefs []string) error
+	CreateOrUpdate(ctx context.Context, logger *logrus.Entry, so *ServiceOfferingNode, attrs map[string]interface{}) error
 	Stats() map[string]int
 }
 
@@ -69,38 +69,37 @@ func (gr *gormRepository) Stats() map[string]int {
 }
 
 // CreateOrUpdate a ServiceOfferingNode Object in the Database
-func (gr *gormRepository) CreateOrUpdate(ctx context.Context, son *ServiceOfferingNode, attrs map[string]interface{}) error {
-	log := logger.GetLogger(ctx)
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, son *ServiceOfferingNode, attrs map[string]interface{}) error {
 	err := son.makeObject(attrs)
 	if err != nil {
-		log.Infof("Error creating a new service offering node object %v", err)
+		logger.Infof("Error creating a new service offering node object %v", err)
 		return err
 	}
 	var instance ServiceOfferingNode
 	err = gr.db.Where(&ServiceOfferingNode{SourceID: son.SourceID, Tower: base.Tower{SourceRef: son.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Infof("Creating a new Service Offering Node %s", son.SourceRef)
+			logger.Infof("Creating a new Service Offering Node %s", son.SourceRef)
 			if result := gr.db.Create(son); result.Error != nil {
 				return fmt.Errorf("Error creating service offering node : %v", result.Error.Error())
 			}
 		} else {
-			log.Infof("Error locating Service Offering Node %s %v", son.SourceRef, err)
+			logger.Infof("Error locating Service Offering Node %s %v", son.SourceRef, err)
 			return err
 		}
 		gr.creates++
 	} else {
-		log.Infof("Service Offering Node %s exists in DB with ID %d", son.SourceRef, instance.ID)
+		logger.Infof("Service Offering Node %s exists in DB with ID %d", son.SourceRef, instance.ID)
 		son.ID = instance.ID // Get the Existing ID for the object
 		instance.RootServiceOfferingSourceRef = son.RootServiceOfferingSourceRef
 		instance.ServiceOfferingSourceRef = son.ServiceOfferingSourceRef
 		instance.Name = son.Name
 		instance.ServiceInventorySourceRef = son.ServiceInventorySourceRef
 
-		log.Infof("Saving Service Offering source_ref %s", son.SourceRef)
+		logger.Infof("Saving Service Offering source_ref %s", son.SourceRef)
 		err := gr.db.Save(&instance).Error
 		if err != nil {
-			log.Errorf("Error Updating Service Offering Node  source_ref %s", son.SourceRef)
+			logger.Errorf("Error Updating Service Offering Node  source_ref %s", son.SourceRef)
 			return err
 		}
 		gr.updates++
@@ -111,18 +110,17 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, son *ServiceOfferi
 // DeleteUnwanted deletes any objects not listed in the keepSourceRefs
 // This is used to delete ServiceOfferingNode that exist in our database but have been
 // deleted from the Ansible Tower
-func (gr *gormRepository) DeleteUnwanted(ctx context.Context, son *ServiceOfferingNode, keepSourceRefs []string) error {
-	log := logger.GetLogger(ctx)
-	results, err := son.getDeleteIDs(ctx, gr.db, keepSourceRefs)
+func (gr *gormRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, son *ServiceOfferingNode, keepSourceRefs []string) error {
+	results, err := son.getDeleteIDs(ctx, logger, gr.db, keepSourceRefs)
 	if err != nil {
-		log.Errorf("Error getting Delete IDs for service offering node %v", err)
+		logger.Errorf("Error getting Delete IDs for service offering node %v", err)
 		return err
 	}
 	for _, res := range results {
-		log.Infof("Attempting to delete ServiceOfferingNode with ID %d Source ref %s", res.ID, res.SourceRef)
+		logger.Infof("Attempting to delete ServiceOfferingNode with ID %d Source ref %s", res.ID, res.SourceRef)
 		result := gr.db.Delete(&ServiceOfferingNode{SourceID: son.SourceID, TenantID: son.TenantID, Tower: base.Tower{SourceRef: res.SourceRef}}, res.ID)
 		if result.Error != nil {
-			log.Errorf("Error deleting Service Offering Node %d %s %v", res.ID, res.SourceRef, result.Error)
+			logger.Errorf("Error deleting Service Offering Node %d %s %v", res.ID, res.SourceRef, result.Error)
 			return result.Error
 		}
 		gr.deletes++
@@ -187,14 +185,13 @@ func (son *ServiceOfferingNode) makeObject(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (son *ServiceOfferingNode) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
-	log := logger.GetLogger(ctx)
+func (son *ServiceOfferingNode) getDeleteIDs(ctx context.Context, logger *logrus.Entry, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
 	var result []base.ResultIDRef
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(keepSourceRefs)
 	length := len(keepSourceRefs)
 	if err := tx.Table("service_offering_nodes").Select("id, source_ref").Where("source_id = ? AND archived_at IS NULL", son.SourceID).Scan(&result).Error; err != nil {
-		log.Errorf("Error fetching ServiceOfferingNode %v", err)
+		logger.Errorf("Error fetching ServiceOfferingNode %v", err)
 		return deleteResultIDRef, err
 	}
 	for _, res := range result {

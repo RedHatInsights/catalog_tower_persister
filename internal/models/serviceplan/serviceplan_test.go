@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -29,7 +29,7 @@ var mockReader = strings.NewReader("hello")
 
 var mockSpec = `{"page": 1, "fruits": ["apple", "peach"]}`
 
-func (mc *MockConverter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
+func (mc *MockConverter) Convert(ctx context.Context, logger *logrus.Entry, r io.Reader) ([]byte, error) {
 	return []byte(mc.data), mc.err
 }
 
@@ -60,7 +60,6 @@ func TestCreateMissingParams(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID}
 	attrs := map[string]interface{}{
@@ -71,7 +70,7 @@ func TestCreateMissingParams(t *testing.T) {
 		"type":     objectType,
 	}
 	mc := &MockConverter{data: mockSpec, err: nil}
-	err := scr.CreateOrUpdate(nctx, &sp, mc, attrs, mockReader)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, attrs, mockReader)
 	checkErrors(t, err, mock, scr, "Expecting invalid attributes", "Missing Required Attribute description")
 }
 
@@ -80,7 +79,6 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID}
@@ -91,7 +89,7 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 		WillReturnError(fmt.Errorf("kaboom"))
 
 	mc := &MockConverter{data: mockSpec, err: nil}
-	err := scr.CreateOrUpdate(nctx, &sp, mc, defaultAttrs, mockReader)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, defaultAttrs, mockReader)
 	checkErrors(t, err, mock, scr, "Expecting create failure", "kaboom")
 }
 
@@ -100,7 +98,6 @@ func TestCreateError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	str := `SELECT * FROM "service_plans" WHERE "service_plans"."source_ref" = $1 AND "service_plans"."source_id" = $2 AND "service_plans"."archived_at" IS NULL ORDER BY "service_plans"."id" LIMIT 1`
@@ -114,7 +111,7 @@ func TestCreateError(t *testing.T) {
 
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID}
 	mc := &MockConverter{data: mockSpec, err: nil}
-	err := scr.CreateOrUpdate(nctx, &sp, mc, defaultAttrs, mockReader)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, defaultAttrs, mockReader)
 	checkErrors(t, err, mock, scr, "Expecting create failure", "kaboom")
 }
 
@@ -123,11 +120,10 @@ func TestCreateConverterError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID}
 	mc := &MockConverter{data: mockSpec, err: fmt.Errorf("kaboom")}
-	err := scr.CreateOrUpdate(nctx, &sp, mc, defaultAttrs, mockReader)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, defaultAttrs, mockReader)
 	checkErrors(t, err, mock, scr, "Expecting create failure", "kaboom")
 }
 
@@ -136,7 +132,6 @@ func TestCreate(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	newID := int64(78)
@@ -151,7 +146,7 @@ func TestCreate(t *testing.T) {
 		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), defaultAttrs["name"].(string), defaultAttrs["description"].(string), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), tenantID, sourceID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "service_offering_id"}).AddRow(newID, 78))
 	mc := &MockConverter{data: mockSpec, err: nil}
-	err := scr.CreateOrUpdate(nctx, &sp, mc, defaultAttrs, mockReader)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, defaultAttrs, mockReader)
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
 	stats := scr.Stats()
@@ -178,7 +173,6 @@ func TestCreateOrUpdateError(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, time.Now(), time.Now(), nil, srcRef, time.Now(), time.Now(), "test_name", "test_desc", encodedExtra, encodedExtra, encodedExtra, nil, tenantID, sourceID)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_plans" WHERE "service_plans"."source_ref" = $1 AND "service_plans"."source_id" = $2 AND "service_plans"."archived_at" IS NULL ORDER BY "service_plans"."id" LIMIT 1`
@@ -188,7 +182,7 @@ func TestCreateOrUpdateError(t *testing.T) {
 	mock.ExpectExec("^UPDATE").WillReturnError(fmt.Errorf("kaboom"))
 
 	mc := &MockConverter{data: mockSpec, err: nil}
-	err = scr.CreateOrUpdate(nctx, &sp, mc, defaultAttrs, mockReader)
+	err = scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, defaultAttrs, mockReader)
 
 	checkErrors(t, err, mock, scr, "Expecting CreateUpdate Error", "kaboom")
 }
@@ -205,7 +199,6 @@ func TestCreateOrUpdate(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, time.Now(), time.Now(), nil, srcRef, time.Now(), time.Now(), "test_name", "test_desc", encodedExtra, encodedExtra, encodedExtra, nil, tenantID, sourceID)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_plans" WHERE "service_plans"."source_ref" = $1 AND "service_plans"."source_id" = $2 AND "service_plans"."archived_at" IS NULL ORDER BY "service_plans"."id" LIMIT 1`
@@ -214,7 +207,7 @@ func TestCreateOrUpdate(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnResult(sqlmock.NewResult(100, 1))
 	mc := &MockConverter{data: mockSpec, err: nil}
-	err = scr.CreateOrUpdate(nctx, &sp, mc, defaultAttrs, mockReader)
+	err = scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sp, mc, defaultAttrs, mockReader)
 
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
@@ -230,14 +223,13 @@ func TestDelete(t *testing.T) {
 	defer teardown()
 	srcRef := "2"
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sp := ServicePlan{SourceID: sourceID, TenantID: tenantID, Tower: base.Tower{SourceRef: srcRef}}
 	markAsArchived := `UPDATE "service_plans" SET "archived_at"=$1 WHERE (source_ref = $2 AND source_id = $3) AND "service_plans"."archived_at" IS NULL`
 	mock.ExpectExec(regexp.QuoteMeta(markAsArchived)).
 		WithArgs(testhelper.AnyTime{}, srcRef, sourceID).
 		WillReturnResult(sqlmock.NewResult(100, 1))
-	err := scr.Delete(nctx, &sp)
+	err := scr.Delete(ctx, testhelper.TestLogger(), &sp)
 	assert.Nil(t, err, "Delete failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for Delete")
 	stats := scr.Stats()

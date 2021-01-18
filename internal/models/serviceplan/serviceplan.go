@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
+	"github.com/sirupsen/logrus"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -31,13 +31,13 @@ type ServicePlan struct {
 
 //DDFConverter interface to convert Tower SPEC to DDF format
 type DDFConverter interface {
-	Convert(ctx context.Context, r io.Reader) ([]byte, error)
+	Convert(ctx context.Context, logger *logrus.Entry, r io.Reader) ([]byte, error)
 }
 
 // Repository interface supports deleted unwanted objects and creating or updating object
 type Repository interface {
-	Delete(ctx context.Context, sp *ServicePlan) error
-	CreateOrUpdate(ctx context.Context, sp *ServicePlan, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error
+	Delete(ctx context.Context, logger *logrus.Entry, sp *ServicePlan) error
+	CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sp *ServicePlan, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error
 	Stats() map[string]int
 }
 
@@ -59,37 +59,36 @@ func (gr *gormRepository) Stats() map[string]int {
 	return map[string]int{"adds": gr.creates, "updates": gr.updates, "deletes": gr.deletes}
 }
 
-func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sp *ServicePlan, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error {
-	log := logger.GetLogger(ctx)
-	err := sp.makeObject(ctx, converter, attrs, r)
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sp *ServicePlan, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error {
+	err := sp.makeObject(ctx, logger, converter, attrs, r)
 	if err != nil {
-		log.Infof("Error creating a new service plan object %v", err)
+		logger.Infof("Error creating a new service plan object %v", err)
 		return err
 	}
 	var instance ServicePlan
 	err = gr.db.Where(&ServicePlan{SourceID: sp.SourceID, Tower: base.Tower{SourceRef: sp.SourceRef}}).First(&instance).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Infof("Creating a new Survey Spec %s", sp.SourceRef)
+			logger.Infof("Creating a new Survey Spec %s", sp.SourceRef)
 			if result := gr.db.Create(sp); result.Error != nil {
 				return fmt.Errorf("Error creating survey spec: %v", result.Error.Error())
 			}
 		} else {
-			log.Infof("Error locating Survey Spec %s %v", sp.SourceRef, err)
+			logger.Infof("Error locating Survey Spec %s %v", sp.SourceRef, err)
 			return err
 		}
 		gr.creates++
 	} else {
-		log.Infof("Survey Spec %s exists in DB with ID %d", sp.SourceRef, instance.ID)
+		logger.Infof("Survey Spec %s exists in DB with ID %d", sp.SourceRef, instance.ID)
 		sp.ID = instance.ID // Get the Existing ID for the object
 		instance.CreateJSONSchema = sp.CreateJSONSchema
 		instance.Description = sp.Description
 		instance.Name = sp.Name
 
-		log.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
+		logger.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
 		err := gr.db.Save(&instance).Error
 		if err != nil {
-			log.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
+			logger.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
 			return err
 		}
 		gr.updates++
@@ -97,7 +96,7 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sp *ServicePlan, c
 	return nil
 }
 
-func (gr *gormRepository) Delete(ctx context.Context, sp *ServicePlan) error {
+func (gr *gormRepository) Delete(ctx context.Context, logger *logrus.Entry, sp *ServicePlan) error {
 	err := gr.db.Model(&ServicePlan{}).Where("source_ref = ? AND source_id = ?", sp.SourceRef, sp.SourceID).Delete(&ServicePlan{}).Error
 	if err == nil {
 		gr.deletes++
@@ -116,15 +115,14 @@ func (sp *ServicePlan) validateAttributes(attrs map[string]interface{}) error {
 	return nil
 }
 
-func (sp *ServicePlan) makeObject(ctx context.Context, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error {
-	log := logger.GetLogger(ctx)
+func (sp *ServicePlan) makeObject(ctx context.Context, logger *logrus.Entry, converter DDFConverter, attrs map[string]interface{}, r io.Reader) error {
 	err := sp.validateAttributes(attrs)
 	if err != nil {
 		return err
 	}
-	spec, err := converter.Convert(ctx, r)
+	spec, err := converter.Convert(ctx, logger, r)
 	if err != nil {
-		log.Println("Error converting service plan")
+		logger.Errorf("Error converting service plan %v", err)
 		return err
 	}
 	sp.CreateJSONSchema = datatypes.JSON(spec)

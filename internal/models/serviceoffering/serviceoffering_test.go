@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceplan"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
@@ -27,7 +27,7 @@ var mockReader = strings.NewReader("hello")
 
 var mockSpec = `{"page": 1, "fruits": ["apple", "peach"]}`
 
-func (mc *MockConverter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
+func (mc *MockConverter) Convert(ctx context.Context, logger *logrus.Entry, r io.Reader) ([]byte, error) {
 	return []byte(mc.data), mc.err
 }
 
@@ -36,14 +36,14 @@ type MockServicePlanRepository struct {
 	err           error
 }
 
-func (mspr *MockServicePlanRepository) Delete(ctx context.Context, sp *serviceplan.ServicePlan) error {
+func (mspr *MockServicePlanRepository) Delete(ctx context.Context, logger *logrus.Entry, sp *serviceplan.ServicePlan) error {
 	if mspr.err == nil {
 		mspr.deletesCalled++
 	}
 	return mspr.err
 }
 
-func (mspr *MockServicePlanRepository) CreateOrUpdate(ctx context.Context, sp *serviceplan.ServicePlan, converter serviceplan.DDFConverter, attrs map[string]interface{}, r io.Reader) error {
+func (mspr *MockServicePlanRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sp *serviceplan.ServicePlan, converter serviceplan.DDFConverter, attrs map[string]interface{}, r io.Reader) error {
 	return nil
 }
 
@@ -79,7 +79,6 @@ func TestBadDateTime(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	srcRef := "4"
 	attrs := map[string]interface{}{
@@ -94,7 +93,7 @@ func TestBadDateTime(t *testing.T) {
 		"survey_enabled":          true,
 	}
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
-	err := sor.CreateOrUpdate(nctx, &so, attrs, &MockServicePlanRepository{})
+	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, attrs, &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "Parsing time error", "parsing time")
 }
 
@@ -103,7 +102,6 @@ func TestCreateMissingParams(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	attrs := map[string]interface{}{
@@ -116,7 +114,7 @@ func TestCreateMissingParams(t *testing.T) {
 		"ask_variables_on_launch": false,
 		"survey_enabled":          true,
 	}
-	err := sor.CreateOrUpdate(nctx, &so, attrs, &MockServicePlanRepository{})
+	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, attrs, &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "Expecting invalid attributes", "Missing Required Attribute description")
 }
 
@@ -125,7 +123,6 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	srcRef := "4"
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -134,7 +131,7 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(str)).
 		WithArgs(srcRef, sourceID).
 		WillReturnError(fmt.Errorf("kaboom"))
-	err := sor.CreateOrUpdate(nctx, &so, makeDefaultAttrs(srcRef, true), &MockServicePlanRepository{})
+	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, makeDefaultAttrs(srcRef, true), &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "Expecting create failure", "kaboom")
 }
 
@@ -142,7 +139,6 @@ func TestCreateError(t *testing.T) {
 	gdb, mock, teardown := testhelper.MockDBSetup(t)
 	defer teardown()
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	srcRef := "4"
 	defaultAttrs := makeDefaultAttrs(srcRef, true)
@@ -155,7 +151,7 @@ func TestCreateError(t *testing.T) {
 		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
 		WillReturnError(fmt.Errorf("kaboom"))
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
-	err := sor.CreateOrUpdate(nctx, &so, makeDefaultAttrs(srcRef, true), &MockServicePlanRepository{})
+	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, makeDefaultAttrs(srcRef, true), &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "Expecting create failure", "kaboom")
 }
 
@@ -164,7 +160,6 @@ func TestCreate(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	srcRef := "4"
 	newID := int64(78)
@@ -178,7 +173,7 @@ func TestCreate(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_offerings"`)).
 		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
 		WillReturnRows(sqlmock.NewRows([]string{"service_offering_icon_id", "id", "service_inventory_id"}).AddRow(5, newID, 6))
-	err := sor.CreateOrUpdate(nctx, &so, defaultAttrs, &MockServicePlanRepository{})
+	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
 	stats := sor.Stats()
@@ -203,14 +198,13 @@ func TestCreateOrUpdateExtraError(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offerings" WHERE "service_offerings"."source_ref" = $1 AND "service_offerings"."source_id" = $2 AND "service_offerings"."archived_at" IS NULL ORDER BY "service_offerings"."id" LIMIT 1`
 	mock.ExpectQuery(regexp.QuoteMeta(str)).
 		WithArgs(srcRef, sourceID).
 		WillReturnRows(rows)
-	err := sor.CreateOrUpdate(nctx, &so, defaultAttrs, &MockServicePlanRepository{})
+	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
 	errMsg := `invalid character 'g' looking for beginning of value`
 	checkErrors(t, err, mock, sor, "TestCreateOrUpdateExtraError", errMsg)
 }
@@ -234,7 +228,6 @@ func TestCreateOrUpdateError(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offerings" WHERE "service_offerings"."source_ref" = $1 AND "service_offerings"."source_id" = $2 AND "service_offerings"."archived_at" IS NULL ORDER BY "service_offerings"."id" LIMIT 1`
@@ -243,7 +236,7 @@ func TestCreateOrUpdateError(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnError(fmt.Errorf("kaboom"))
 
-	err = sor.CreateOrUpdate(nctx, &so, defaultAttrs, &MockServicePlanRepository{})
+	err = sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
 
 	checkErrors(t, err, mock, sor, "Expecting CreateUpdate Error", "kaboom")
 }
@@ -268,7 +261,6 @@ func TestCreateOrUpdate(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offerings" WHERE "service_offerings"."source_ref" = $1 AND "service_offerings"."source_id" = $2 AND "service_offerings"."archived_at" IS NULL ORDER BY "service_offerings"."id" LIMIT 1`
@@ -276,7 +268,7 @@ func TestCreateOrUpdate(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnResult(sqlmock.NewResult(100, 1))
-	err = sor.CreateOrUpdate(nctx, &so, defaultAttrs, &MockServicePlanRepository{})
+	err = sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
 
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
@@ -307,7 +299,6 @@ func TestCreateOrUpdateSurveyDisabled(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offerings" WHERE "service_offerings"."source_ref" = $1 AND "service_offerings"."source_id" = $2 AND "service_offerings"."archived_at" IS NULL ORDER BY "service_offerings"."id" LIMIT 1`
@@ -316,7 +307,7 @@ func TestCreateOrUpdateSurveyDisabled(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnResult(sqlmock.NewResult(100, 1))
 	mspr := &MockServicePlanRepository{}
-	err = sor.CreateOrUpdate(nctx, &so, defaultAttrs, mspr)
+	err = sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, mspr)
 
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
@@ -348,7 +339,6 @@ func TestCreateOrUpdateSurveyDisabledError(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offerings" WHERE "service_offerings"."source_ref" = $1 AND "service_offerings"."source_id" = $2 AND "service_offerings"."archived_at" IS NULL ORDER BY "service_offerings"."id" LIMIT 1`
@@ -357,7 +347,7 @@ func TestCreateOrUpdateSurveyDisabledError(t *testing.T) {
 		WillReturnRows(rows)
 
 	mspr := &MockServicePlanRepository{err: fmt.Errorf("kaboom")}
-	err = sor.CreateOrUpdate(nctx, &so, defaultAttrs, mspr)
+	err = sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, mspr)
 
 	checkErrors(t, err, mock, sor, "TestCreateOrUpdateSurveyDisabledError", "kaboom")
 	assert.NotNil(t, err, "TestCreateOrUpdateSurveyDisabledError failed")
@@ -383,7 +373,6 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offerings" WHERE source_id = $1 AND archived_at IS NULL`
@@ -391,7 +380,7 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		WithArgs(sourceID).
 		WillReturnRows(rows)
 	sourceRefs := []string{srcRef}
-	err = sor.DeleteUnwanted(nctx, &so, sourceRefs, &MockServicePlanRepository{})
+	err = sor.DeleteUnwanted(ctx, testhelper.TestLogger(), &so, sourceRefs, &MockServicePlanRepository{})
 
 	assert.Nil(t, err, "DeleteUnwantedMissing failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
@@ -423,7 +412,6 @@ func TestDeleteUnwantedMissingServicePlan(t *testing.T) {
 	rows2 := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offerings" WHERE source_id = $1 AND archived_at IS NULL`
@@ -444,7 +432,7 @@ func TestDeleteUnwantedMissingServicePlan(t *testing.T) {
 	keep := "4"
 	sourceRefs := []string{keep}
 	mspr := &MockServicePlanRepository{err: fmt.Errorf("kaboom")}
-	err = sor.DeleteUnwanted(nctx, &so, sourceRefs, mspr)
+	err = sor.DeleteUnwanted(ctx, testhelper.TestLogger(), &so, sourceRefs, mspr)
 	assert.NotNil(t, err, "TestDeleteUnwantedMissingServicePlan failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
 	stats := sor.Stats()
@@ -475,7 +463,6 @@ func TestDeleteUnwanted(t *testing.T) {
 	rows2 := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offerings" WHERE source_id = $1 AND archived_at IS NULL`
@@ -495,7 +482,7 @@ func TestDeleteUnwanted(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err = sor.DeleteUnwanted(nctx, &so, sourceRefs, &MockServicePlanRepository{})
+	err = sor.DeleteUnwanted(ctx, testhelper.TestLogger(), &so, sourceRefs, &MockServicePlanRepository{})
 	assert.Nil(t, err, "DeleteUnwanted failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
 	stats := sor.Stats()
@@ -509,7 +496,6 @@ func TestDeleteUnwantedError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offerings" WHERE source_id = $1 AND archived_at IS NULL`
@@ -519,7 +505,7 @@ func TestDeleteUnwantedError(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := sor.DeleteUnwanted(nctx, &so, sourceRefs, &MockServicePlanRepository{})
+	err := sor.DeleteUnwanted(ctx, testhelper.TestLogger(), &so, sourceRefs, &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "DeleteUnwantedError", "kaboom")
 }
 
@@ -546,7 +532,6 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offerings" WHERE source_id = $1 AND archived_at IS NULL`
@@ -566,7 +551,7 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err = sor.DeleteUnwanted(nctx, &so, sourceRefs, &MockServicePlanRepository{})
+	err = sor.DeleteUnwanted(ctx, testhelper.TestLogger(), &so, sourceRefs, &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "DeleteUnwantedErrorInDelete", "kaboom")
 }
 
@@ -589,7 +574,6 @@ func TestDeleteUnwantedMissingInstance(t *testing.T) {
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offerings" WHERE source_id = $1 AND archived_at IS NULL`
@@ -604,7 +588,7 @@ func TestDeleteUnwantedMissingInstance(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err = sor.DeleteUnwanted(nctx, &so, sourceRefs, &MockServicePlanRepository{})
+	err = sor.DeleteUnwanted(ctx, testhelper.TestLogger(), &so, sourceRefs, &MockServicePlanRepository{})
 	checkErrors(t, err, mock, sor, "TestDeleteUnwantedMissingInstance", "kaboom")
 }
 
