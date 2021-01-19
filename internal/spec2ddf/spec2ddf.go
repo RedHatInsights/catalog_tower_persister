@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 type ddfField struct {
@@ -55,7 +57,7 @@ type ddfSpec struct {
 type Converter struct{}
 
 // Convert will transform a Tower Survey Spec to the DDF format
-func (sc *Converter) Convert(ctx context.Context, r io.Reader) ([]byte, error) {
+func (sc *Converter) Convert(ctx context.Context, logger *logrus.Entry, r io.Reader) ([]byte, error) {
 	var ss surveySpec
 	decoder := json.NewDecoder(r)
 	decoder.UseNumber()

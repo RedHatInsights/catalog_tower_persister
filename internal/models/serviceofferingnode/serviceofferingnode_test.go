@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -41,11 +40,10 @@ func TestBadDateTime(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	attrs := makeDefaultAttrs("4", "gobbledegook", "job")
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 	checkErrors(t, err, mock, sonr, "Parsing time error", "parsing time")
 }
 
@@ -54,7 +52,6 @@ func TestCreateMissingParams(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	attrs := map[string]interface{}{
@@ -63,7 +60,7 @@ func TestCreateMissingParams(t *testing.T) {
 		"name":     "demo",
 		"type":     objectType,
 	}
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 	checkErrors(t, err, mock, sonr, "Expecting invalid attributes", "Missing Required Attribute created")
 }
 
@@ -72,7 +69,6 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	srcRef := "4"
 	attrs := makeDefaultAttrs(srcRef, "2020-01-08T10:22:59.423585Z", "job")
@@ -83,7 +79,7 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnError(fmt.Errorf("kaboom"))
 
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 	checkErrors(t, err, mock, sonr, "Expecting create failure", "kaboom")
 }
 
@@ -92,7 +88,6 @@ func TestCreateError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	srcRef := "4"
 	attrs := makeDefaultAttrs(srcRef, "2020-01-08T10:22:59.423585Z", "job")
@@ -108,7 +103,7 @@ func TestCreateError(t *testing.T) {
 		WillReturnError(fmt.Errorf("kaboom"))
 
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 	checkErrors(t, err, mock, sonr, "Expecting create failure", "kaboom")
 }
 
@@ -117,12 +112,11 @@ func TestCreateIgnoreObject(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	srcRef := "4"
 	attrs := makeDefaultAttrs(srcRef, "2020-01-08T10:22:59.423585Z", "inventory_update")
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 	errMsg := "Ignoring non job template or workflow job template nodes"
 	checkErrors(t, err, mock, sonr, "Expecting create failure", errMsg)
 }
@@ -132,7 +126,6 @@ func TestCreate(t *testing.T) {
 	defer teardown()
 	//	extra := map[string]interface{}{"unified_job_type": "job"}
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	srcRef := "4"
 	attrs := makeDefaultAttrs(srcRef, "2020-01-08T10:22:59.423585Z", "job")
@@ -148,7 +141,7 @@ func TestCreate(t *testing.T) {
 		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(),
 			nil, sqlmock.AnyArg(), sqlmock.AnyArg(), tenantID, sourceID).
 		WillReturnRows(sqlmock.NewRows([]string{"service_offering_id", "root_service_offering_id", "service_inventory_id", "id"}).AddRow(5, 6, 7, newID))
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
 	stats := sonr.Stats()
@@ -172,7 +165,6 @@ func TestCreateOrUpdateError(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", time.Now(), time.Now(), time.Now())
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offering_nodes" WHERE "service_offering_nodes"."source_ref" = $1 AND "service_offering_nodes"."source_id" = $2 AND "service_offering_nodes"."archived_at" IS NULL ORDER BY "service_offering_nodes"."id" LIMIT 1`
@@ -181,7 +173,7 @@ func TestCreateOrUpdateError(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnError(fmt.Errorf("kaboom"))
 
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 
 	checkErrors(t, err, mock, sonr, "Expecting CreateUpdate Error", "kaboom")
 }
@@ -195,7 +187,6 @@ func TestCreateOrUpdate(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", time.Now(), time.Now(), time.Now())
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_offering_nodes" WHERE "service_offering_nodes"."source_ref" = $1 AND "service_offering_nodes"."source_id" = $2 AND "service_offering_nodes"."archived_at" IS NULL ORDER BY "service_offering_nodes"."id" LIMIT 1`
@@ -203,7 +194,7 @@ func TestCreateOrUpdate(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnResult(sqlmock.NewResult(100, 1))
-	err := sonr.CreateOrUpdate(nctx, &son, attrs)
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
 
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
@@ -224,7 +215,6 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		AddRow(id, tenantID, sourceID, sourceRef, "Test", time.Now(), time.Now(), time.Now())
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offering_nodes" WHERE source_id = $1 AND archived_at IS NULL`
@@ -232,7 +222,7 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		WithArgs(sourceID).
 		WillReturnRows(rows)
 	sourceRefs := []string{sourceRef}
-	err := sonr.DeleteUnwanted(nctx, &son, sourceRefs)
+	err := sonr.DeleteUnwanted(ctx, testhelper.TestLogger(), &son, sourceRefs)
 
 	assert.Nil(t, err, "DeleteUnwantedMissing failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
@@ -252,7 +242,6 @@ func TestDeleteUnwanted(t *testing.T) {
 		AddRow(id, tenantID, sourceID, sourceRef, "Test", time.Now(), time.Now(), time.Now())
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offering_nodes" WHERE source_id = $1 AND archived_at IS NULL`
@@ -267,7 +256,7 @@ func TestDeleteUnwanted(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := sonr.DeleteUnwanted(nctx, &son, sourceRefs)
+	err := sonr.DeleteUnwanted(ctx, testhelper.TestLogger(), &son, sourceRefs)
 	assert.Nil(t, err, "DeleteUnwanted failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
 	stats := sonr.Stats()
@@ -281,7 +270,6 @@ func TestDeleteUnwantedError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offering_nodes" WHERE source_id = $1 AND archived_at IS NULL`
@@ -291,7 +279,7 @@ func TestDeleteUnwantedError(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := sonr.DeleteUnwanted(nctx, &son, sourceRefs)
+	err := sonr.DeleteUnwanted(ctx, testhelper.TestLogger(), &son, sourceRefs)
 	checkErrors(t, err, mock, sonr, "DeleteUnwantedError", "kaboom")
 }
 
@@ -305,7 +293,6 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 		AddRow(id, tenantID, sourceID, sourceRef, "Test", time.Now(), time.Now(), time.Now())
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	sonr := NewGORMRepository(gdb)
 	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_offering_nodes" WHERE source_id = $1 AND archived_at IS NULL`
@@ -320,7 +307,7 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := sonr.DeleteUnwanted(nctx, &son, sourceRefs)
+	err := sonr.DeleteUnwanted(ctx, testhelper.TestLogger(), &son, sourceRefs)
 	checkErrors(t, err, mock, sonr, "DeleteUnwantedErrorInDelete", "kaboom")
 }
 

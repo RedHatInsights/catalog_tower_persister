@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
@@ -39,7 +38,6 @@ func TestBadDateTime(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	attrs := map[string]interface{}{
@@ -52,7 +50,7 @@ func TestBadDateTime(t *testing.T) {
 		"credential_type": json.Number("14"),
 	}
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
-	err := scr.CreateOrUpdate(nctx, &sc, attrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, attrs)
 	checkErrors(t, err, mock, scr, "Parsing time error", "parsing time")
 }
 
@@ -61,7 +59,6 @@ func TestCreateMissingParams(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	attrs := map[string]interface{}{
@@ -72,7 +69,7 @@ func TestCreateMissingParams(t *testing.T) {
 		"type":            objectType,
 		"credential_type": json.Number("14"),
 	}
-	err := scr.CreateOrUpdate(nctx, &sc, attrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, attrs)
 	checkErrors(t, err, mock, scr, "Expecting invalid attributes", "Missing Required Attribute description")
 }
 
@@ -81,7 +78,6 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
@@ -91,7 +87,7 @@ func TestCreateErrorLocatingRecord(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnError(fmt.Errorf("kaboom"))
 
-	err := scr.CreateOrUpdate(nctx, &sc, defaultAttrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
 	checkErrors(t, err, mock, scr, "Expecting create failure", "kaboom")
 }
 
@@ -100,7 +96,6 @@ func TestCreateError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	str := `SELECT * FROM "service_credentials" WHERE "service_credentials"."source_ref" = $1 AND "service_credentials"."source_id" = $2 AND "service_credentials"."archived_at" IS NULL ORDER BY "service_credentials"."id" LIMIT 1`
@@ -113,7 +108,7 @@ func TestCreateError(t *testing.T) {
 		WillReturnError(fmt.Errorf("kaboom"))
 
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
-	err := scr.CreateOrUpdate(nctx, &sc, defaultAttrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
 	checkErrors(t, err, mock, scr, "Expecting create failure", "kaboom")
 }
 
@@ -122,7 +117,6 @@ func TestCreate(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	srcRef := "4"
 	newID := int64(78)
@@ -135,7 +129,7 @@ func TestCreate(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_credentials"`)).
 		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), "demo", sqlmock.AnyArg(), "openshift", tenantID, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"service_credential_type_id", "id"}).AddRow(5, newID))
-	err := scr.CreateOrUpdate(nctx, &sc, defaultAttrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
 	stats := scr.Stats()
@@ -158,7 +152,6 @@ func TestCreateOrUpdateError(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_credentials" WHERE "service_credentials"."source_ref" = $1 AND "service_credentials"."source_id" = $2 AND "service_credentials"."archived_at" IS NULL ORDER BY "service_credentials"."id" LIMIT 1`
@@ -167,7 +160,7 @@ func TestCreateOrUpdateError(t *testing.T) {
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnError(fmt.Errorf("kaboom"))
 
-	err := scr.CreateOrUpdate(nctx, &sc, defaultAttrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
 
 	checkErrors(t, err, mock, scr, "Expecting CreateUpdate Error", "kaboom")
 }
@@ -180,7 +173,6 @@ func TestCreateOrUpdate(t *testing.T) {
 	rows := sqlmock.NewRows(columns).
 		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT * FROM "service_credentials" WHERE "service_credentials"."source_ref" = $1 AND "service_credentials"."source_id" = $2 AND "service_credentials"."archived_at" IS NULL ORDER BY "service_credentials"."id" LIMIT 1`
@@ -188,7 +180,7 @@ func TestCreateOrUpdate(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnRows(rows)
 	mock.ExpectExec("^UPDATE").WillReturnResult(sqlmock.NewResult(100, 1))
-	err := scr.CreateOrUpdate(nctx, &sc, defaultAttrs)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
 
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
@@ -209,7 +201,6 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_credentials" WHERE source_id = $1 AND archived_at IS NULL`
@@ -217,7 +208,7 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		WithArgs(sourceID).
 		WillReturnRows(rows)
 	sourceRefs := []string{sourceRef}
-	err := scr.DeleteUnwanted(nctx, &sc, sourceRefs)
+	err := scr.DeleteUnwanted(ctx, testhelper.TestLogger(), &sc, sourceRefs)
 
 	assert.Nil(t, err, "DeleteUnwantedMissing failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
@@ -237,7 +228,6 @@ func TestDeleteUnwanted(t *testing.T) {
 		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_credentials" WHERE source_id = $1 AND archived_at IS NULL`
@@ -252,7 +242,7 @@ func TestDeleteUnwanted(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := scr.DeleteUnwanted(nctx, &sc, sourceRefs)
+	err := scr.DeleteUnwanted(ctx, testhelper.TestLogger(), &sc, sourceRefs)
 	assert.Nil(t, err, "DeleteUnwanted failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations for DeleteUnwanted")
 	stats := scr.Stats()
@@ -266,7 +256,6 @@ func TestDeleteUnwantedError(t *testing.T) {
 	defer teardown()
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_credentials" WHERE source_id = $1 AND archived_at IS NULL`
@@ -276,7 +265,7 @@ func TestDeleteUnwantedError(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := scr.DeleteUnwanted(nctx, &sc, sourceRefs)
+	err := scr.DeleteUnwanted(ctx, testhelper.TestLogger(), &sc, sourceRefs)
 	checkErrors(t, err, mock, scr, "DeleteUnwantedError", "kaboom")
 }
 
@@ -290,7 +279,6 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
 
 	ctx := context.TODO()
-	nctx := logger.CtxWithLoggerID(ctx, "12345")
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
 	str := `SELECT id, source_ref FROM "service_credentials" WHERE source_id = $1 AND archived_at IS NULL`
@@ -305,7 +293,7 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 
 	keep := "4"
 	sourceRefs := []string{keep}
-	err := scr.DeleteUnwanted(nctx, &sc, sourceRefs)
+	err := scr.DeleteUnwanted(ctx, testhelper.TestLogger(), &sc, sourceRefs)
 	checkErrors(t, err, mock, scr, "DeleteUnwantedErrorInDelete", "kaboom")
 }
 

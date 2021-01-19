@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
+	"github.com/sirupsen/logrus"
 
 	"gorm.io/gorm"
 )
@@ -27,8 +27,8 @@ type ServiceCredentialType struct {
 
 // Repository interface supports deleted unwanted objects and creating or updating object
 type Repository interface {
-	DeleteUnwanted(ctx context.Context, sct *ServiceCredentialType, keepSourceRefs []string) error
-	CreateOrUpdate(ctx context.Context, sct *ServiceCredentialType, attrs map[string]interface{}) error
+	DeleteUnwanted(ctx context.Context, logger *logrus.Entry, sct *ServiceCredentialType, keepSourceRefs []string) error
+	CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sct *ServiceCredentialType, attrs map[string]interface{}) error
 	Stats() map[string]int
 }
 
@@ -51,8 +51,7 @@ func (gr *gormRepository) Stats() map[string]int {
 }
 
 // CreateOrUpdate a ServiceCredentialType Object in the Database
-func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sct *ServiceCredentialType, attrs map[string]interface{}) error {
-	logger := logger.GetLogger(ctx)
+func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sct *ServiceCredentialType, attrs map[string]interface{}) error {
 	err := sct.makeObject(attrs)
 	if err != nil {
 		logger.Infof("Error creating a new credential type object %v", err)
@@ -96,9 +95,8 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, sct *ServiceCreden
 // DeleteUnwanted deletes any objects not listed in the keepSourceRefs
 // This is used to delete ServiceCredentialTypes that exist in our database but have been
 // deleted from the Ansible Tower
-func (gr *gormRepository) DeleteUnwanted(ctx context.Context, sct *ServiceCredentialType, keepSourceRefs []string) error {
-	logger := logger.GetLogger(ctx)
-	results, err := sct.getDeleteIDs(ctx, gr.db, keepSourceRefs)
+func (gr *gormRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, sct *ServiceCredentialType, keepSourceRefs []string) error {
+	results, err := sct.getDeleteIDs(ctx, logger, gr.db, keepSourceRefs)
 	if err != nil {
 		logger.Errorf("Error getting Delete IDs for service credential types %v", err)
 		return err
@@ -152,8 +150,7 @@ func (sct *ServiceCredentialType) makeObject(attrs map[string]interface{}) error
 	return nil
 }
 
-func (sct *ServiceCredentialType) getDeleteIDs(ctx context.Context, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
-	logger := logger.GetLogger(ctx)
+func (sct *ServiceCredentialType) getDeleteIDs(ctx context.Context, logger *logrus.Entry, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
 	var result []base.ResultIDRef
 	var deleteResultIDRef []base.ResultIDRef
 	sort.Strings(keepSourceRefs)

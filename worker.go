@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/RedHatInsights/catalog_tower_persister/internal/catalogtask"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/source"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/tenant"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -36,48 +35,48 @@ type InventoryContext struct {
 	incrementalRefresh bool
 	lastRefreshTime    time.Time
 	pageContext        *PageContext
-	glog               logger.Logger
+	logger             *logrus.Entry
 	catalogTask        catalogtask.CatalogTask
 }
 
-func startInventoryWorker(ctx context.Context, db DatabaseContext, message MessagePayload, headers map[string]string, shutdown chan struct{}, wg *sync.WaitGroup) {
+func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logrus.Entry, message MessagePayload, headers map[string]string, shutdown chan struct{}, wg *sync.WaitGroup) {
 	fmt.Println("Inventory Worker started")
 	defer fmt.Println("Inventory Worker finished")
-	glog := logger.GetLogger(ctx)
-	defer glog.Info("Inventory worker terminating")
+	defer logger.Info("Inventory worker terminating")
 	defer wg.Done()
-	glog.Info("Starting Inventory Worker")
+	logger.Info("Starting Inventory Worker")
 	duration := 15 * time.Minute
 	new_ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
-	inv := InventoryContext{glog: glog}
+	inv := InventoryContext{logger: logger}
 	inv.timeToWait = 5 * time.Minute // Wait five minutes for a response
 	inv.refreshStats.refreshStartedAt = time.Now().UTC()
 	inv.refreshStats.bytesReceived = message.Size
-	inv.catalogTask = catalogtask.MakeCatalogTask(ctx, message.TaskURL, headers)
+	inv.catalogTask = catalogtask.MakeCatalogTask(ctx, inv.logger, message.TaskURL, headers)
 
 	err := inv.setup(db, message.TenantID, message.SourceID)
 	if err != nil {
-		inv.updateTask("completed", "error", err.Error())
-		inv.glog.Errorf("Error setting up tenant and source %v", err)
+		inv.updateTask("completed", "error", err.Error(), nil)
+		inv.logger.Errorf("Error setting up tenant and source %v", err)
 		return
 	}
-	inv.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size))
+	inv.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
 	inv.dbTransaction = db.DB.Begin()
-	inv.pageContext = MakePageContext(inv.glog, inv.tenant, inv.source, inv.dbTransaction)
+	inv.pageContext = MakePageContext(inv.logger, inv.tenant, inv.source, inv.dbTransaction)
 	err = inv.process(new_ctx, message.DataURL, shutdown)
 	inv.refreshStats.refreshFinishedAt = time.Now().UTC()
 	if err != nil {
-		inv.glog.Errorf("Rolling back database changes %v", err)
+		inv.logger.Errorf("Rolling back database changes %v", err)
 		inv.dbTransaction.Rollback()
 		inv.updateSource(db, message.SourceID, "failed")
-		inv.updateTask("completed", "error", err.Error())
+		inv.updateTask("completed", "error", err.Error(), nil)
 	} else {
 		inv.dbTransaction.Commit()
-		inv.glog.Info("Commited database changes")
+		inv.logger.Info("Commited database changes")
 		inv.updateSource(db, message.SourceID, "success")
-		inv.updateTask("completed", "ok", "Success")
+		inv.updateTask("completed", "ok", "Success", inv.pageContext.GetStats(new_ctx))
+		inv.pageContext.LogReports(new_ctx)
 	}
 }
 
@@ -85,19 +84,19 @@ func (inv *InventoryContext) setup(db DatabaseContext, tenantID int64, sourceID 
 	var err error
 	inv.tenant, err = inv.findTenant(db, tenantID)
 	if err != nil {
-		inv.glog.Errorf("Could not find tenant %v", err)
+		inv.logger.Errorf("Could not find tenant %v", err)
 		return err
 	}
 
 	inv.source, err = inv.findSource(db, sourceID)
 	if err != nil {
-		inv.glog.Errorf("Could not find source %v", err)
+		inv.logger.Errorf("Could not find source %v", err)
 		return err
 	}
 
 	err = inv.singleRefresh(db)
 	if err != nil {
-		inv.glog.Errorf("Refresh failed %v", err)
+		inv.logger.Errorf("Refresh failed %v", err)
 		return err
 	}
 	return nil
@@ -105,18 +104,18 @@ func (inv *InventoryContext) setup(db DatabaseContext, tenantID int64, sourceID 
 
 func (inv *InventoryContext) process(ctx context.Context, url string, shutdown chan struct{}) error {
 
-	inv.glog.Infof("Fetching URL %s", url)
+	inv.logger.Infof("Fetching URL %s", url)
 
 	resp, err := http.Get(url)
 	if err != nil {
-		inv.glog.Errorf("Error getting URL %s %v", url, err)
+		inv.logger.Errorf("Error getting URL %s %v", url, err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	zr, err := gzip.NewReader(resp.Body)
 	if err != nil {
-		inv.glog.Errorf("Error opening gzip %v", err)
+		inv.logger.Errorf("Error opening gzip %v", err)
 		return err
 	}
 	defer zr.Close()
@@ -127,15 +126,15 @@ func (inv *InventoryContext) process(ctx context.Context, url string, shutdown c
 			break
 		}
 		if err != nil {
-			inv.glog.Errorf("Error reading tar header %v", err)
+			inv.logger.Errorf("Error reading tar header %v", err)
 			return err
 		}
 		switch hdr.Typeflag {
 		case tar.TypeReg:
-			inv.glog.Infof("Contents of %s", hdr.Name)
+			inv.logger.Infof("Contents of %s", hdr.Name)
 			err = inv.pageContext.Process(ctx, hdr.Name, tr)
 			if err != nil {
-				inv.glog.Errorf("Error handling file %s %v", hdr.Name, err)
+				inv.logger.Errorf("Error handling file %s %v", hdr.Name, err)
 				return err
 			}
 		}
@@ -143,7 +142,7 @@ func (inv *InventoryContext) process(ctx context.Context, url string, shutdown c
 	}
 	err = inv.postProcess(ctx)
 	if err != nil {
-		inv.glog.Errorf("Error post processing data %v", err)
+		inv.logger.Errorf("Error post processing data %v", err)
 		return err
 	}
 	return nil
@@ -154,13 +153,13 @@ func (inv *InventoryContext) postProcess(ctx context.Context) error {
 	lh := LinkHandler{PC: inv.pageContext}
 	err := lh.Process()
 	if err != nil {
-		inv.glog.Errorf("Error in linking objects %v", err)
+		inv.logger.Errorf("Error in linking objects %v", err)
 		return err
 	}
 	dh := DeleteHandler{PC: inv.pageContext}
 	err = dh.Process(ctx)
 	if err != nil {
-		inv.glog.Errorf("Error in linking objects %v", err)
+		inv.logger.Errorf("Error in linking objects %v", err)
 		return err
 	}
 	return nil
@@ -202,7 +201,7 @@ func (inv *InventoryContext) singleRefresh(db DatabaseContext) error {
 	//db.DB.Save(&inv.Source)
 	result := db.DB.Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).Find(&source.Source{ID: inv.source.ID}).Updates(inv.source)
 	if result.Error != nil {
-		log.Errorf("Error locking source %d %v", inv.source.ID, result.Error)
+		inv.logger.Errorf("Error locking source %d %v", inv.source.ID, result.Error)
 		return result.Error
 	}
 	return nil
@@ -218,17 +217,20 @@ func (inv *InventoryContext) updateSource(db DatabaseContext, sourceID int64, st
 		if state == "success" {
 			source.LastSuccessfulRefreshAt = sql.NullTime{Valid: true, Time: inv.refreshStats.refreshStartedAt}
 		}
-		inv.glog.Infof("Source Info %v", source)
+		inv.logger.Infof("Source Info %v", source)
 		db.DB.Save(&source)
 	}
 	return result.Error
 }
 
-func (inv *InventoryContext) updateTask(state, status, msg string) error {
+func (inv *InventoryContext) updateTask(state, status, msg string, stats map[string]interface{}) error {
 	data := map[string]interface{}{"status": status, "state": state, "message": msg}
+	if stats != nil {
+		data["output"] = stats
+	}
 	err := inv.catalogTask.Update(data, &http.Client{})
 	if err != nil {
-		log.Errorf("Error updating catalog task %v", err)
+		inv.logger.Errorf("Error updating catalog task %v", err)
 		return err
 	}
 	return nil

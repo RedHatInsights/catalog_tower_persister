@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/RedHatInsights/catalog_tower_persister/internal/logger"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/servicecredential"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/servicecredentialtype"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
@@ -19,6 +18,7 @@ import (
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/source"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/tenant"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/spec2ddf"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +30,7 @@ type WorkflowNode struct {
 }
 
 type PageContext struct {
-	glog                                 logger.Logger
+	logger                               *logrus.Entry
 	Tenant                               *tenant.Tenant
 	Source                               *source.Source
 	InventoryMap                         map[string][]int64
@@ -57,12 +57,12 @@ var surveySpecRe = regexp.MustCompile(`api\/v2\/(job_templates|workflow_job_temp
 
 var objTypeRe = regexp.MustCompile(`\/api\/v2\/(.*)\/`)
 
-func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source.Source, dbTransaction *gorm.DB) *PageContext {
+func MakePageContext(logger *logrus.Entry, tenant *tenant.Tenant, source *source.Source, dbTransaction *gorm.DB) *PageContext {
 	pc := PageContext{
 		Tenant:        tenant,
 		Source:        source,
 		dbTransaction: dbTransaction,
-		glog:          logger}
+		logger:        logger}
 	pc.InventoryMap = make(map[string][]int64)
 	pc.ServiceCredentialToCredentialTypeMap = make(map[string][]int64)
 	pc.servicecredentialrepo = servicecredential.NewGORMRepository(dbTransaction)
@@ -77,7 +77,7 @@ func MakePageContext(logger logger.Logger, tenant *tenant.Tenant, source *source
 func (pc *PageContext) Process(ctx context.Context, url string, r io.Reader) error {
 	objectType, err := getObjectType(url)
 	if err != nil {
-		pc.glog.Errorf("%v", err)
+		pc.logger.Errorf("%v", err)
 		return err
 	}
 	// Survey Spec have a different format and are never returned as a list
@@ -92,13 +92,13 @@ func (pc *PageContext) Process(ctx context.Context, url string, r io.Reader) err
 	decoder.UseNumber()
 	err = decoder.Decode(&pr)
 	if err != nil {
-		pc.glog.Errorf("Error decoding message body %s %v", url, err)
+		pc.logger.Errorf("Error decoding message body %s %v", url, err)
 		return err
 	}
 
 	if isListResults(pr) {
 		ids := strings.Contains(url, "/id")
-		pc.glog.Infof("Received %s objects idObject %v", pr["count"].(json.Number).String(), ids)
+		pc.logger.Infof("Received %s objects idObject %v", pr["count"].(json.Number).String(), ids)
 		if val, ok := pr["results"]; ok {
 			for _, obj := range val.([]interface{}) {
 				if ids {
@@ -106,8 +106,8 @@ func (pc *PageContext) Process(ctx context.Context, url string, r io.Reader) err
 				} else {
 					err = pc.addObject(ctx, obj.(map[string]interface{}), url, nil)
 					if err != nil {
-						pc.glog.Errorf("Error adding object %s", objectType)
-						pc.glog.Errorf("Error %v", err)
+						pc.logger.Errorf("Error adding object %s", objectType)
+						pc.logger.Errorf("Error %v", err)
 						return err
 					}
 				}
@@ -116,8 +116,8 @@ func (pc *PageContext) Process(ctx context.Context, url string, r io.Reader) err
 	} else {
 		err = pc.addObject(ctx, pr, url, nil)
 		if err != nil {
-			pc.glog.Errorf("Error adding object %s", url)
-			pc.glog.Errorf("Error %v", err)
+			pc.logger.Errorf("Error adding object %s", url)
+			pc.logger.Errorf("Error %v", err)
 			return err
 		}
 	}
@@ -176,10 +176,37 @@ func (pc *PageContext) addIDList(ctx context.Context, obj map[string]interface{}
 		}
 	case "survey_spec":
 	default:
-		pc.glog.Errorf("Invalid Object type found %s", objType)
+		pc.logger.Errorf("Invalid Object type found %s", objType)
 		return fmt.Errorf("Invalid Object type found %s", objType)
 	}
 	return nil
+}
+
+func (pc *PageContext) GetStats(ctx context.Context) map[string]interface{} {
+	stats := map[string]interface{}{
+		"credentials":            pc.servicecredentialrepo.Stats(),
+		"credential_types":       pc.servicecredentialrepo.Stats(),
+		"inventories":            pc.serviceinventoryrepo.Stats(),
+		"service_plans":          pc.serviceplanrepo.Stats(),
+		"service_offering":       pc.serviceofferingrepo.Stats(),
+		"service_offering_nodes": pc.serviceofferingnoderepo.Stats(),
+	}
+	return stats
+}
+
+func (pc *PageContext) LogReports(ctx context.Context) {
+	x := pc.servicecredentialrepo.Stats()
+	pc.logger.Info(fmt.Sprintf("Credential Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
+	x = pc.servicecredentialrepo.Stats()
+	pc.logger.Info(fmt.Sprintf("Credential Type Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
+	x = pc.serviceinventoryrepo.Stats()
+	pc.logger.Info(fmt.Sprintf("Inventory Type Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
+	x = pc.serviceplanrepo.Stats()
+	pc.logger.Info(fmt.Sprintf("Service Plan Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
+	x = pc.serviceofferingrepo.Stats()
+	pc.logger.Info(fmt.Sprintf("Service Offering Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
+	x = pc.serviceofferingnoderepo.Stats()
+	pc.logger.Info(fmt.Sprintf("Service Offering Node Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
 }
 
 func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}, url string, r io.Reader) error {
@@ -197,12 +224,12 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			// is deleted, the survey enabled flag is not reset back to false
 			/*
 				if _, ok := obj["name"]; !ok {
-					pc.glog.Infof("Survey Enabled is incorrectly set, ignoring it for now")
+					pc.logger.Infof("Survey Enabled is incorrectly set, ignoring it for now")
 					sp := serviceplan.ServicePlan{Source: *pc.Source, Tenant: *pc.Tenant,
 						Tower: base.Tower{SourceRef: s[2]}}
 					err := sp.Delete(pc.dbTransaction)
 					if err != nil {
-						pc.glog.Errorf("Error deleting straggler survey spec %v", err)
+						pc.logger.Errorf("Error deleting straggler survey spec %v", err)
 					}
 					// Ignore the error for now
 					return nil
@@ -212,19 +239,19 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		}
 	}
 
-	pc.glog.Infof("Object Type %s Source Ref %s", obj["type"].(string), obj["id"].(json.Number).String())
+	pc.logger.Infof("Object Type %s Source Ref %s", obj["type"].(string), obj["id"].(json.Number).String())
 
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":
 		so := &serviceoffering.ServiceOffering{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = pc.serviceofferingrepo.CreateOrUpdate(ctx, so, obj, pc.serviceplanrepo)
+		err = pc.serviceofferingrepo.CreateOrUpdate(ctx, pc.logger, so, obj, pc.serviceplanrepo)
 		if err != nil {
-			pc.glog.Errorf("Error adding job template %s %v", so.SourceRef, err)
+			pc.logger.Errorf("Error adding job template %s %v", so.SourceRef, err)
 			return err
 		}
 
 		if so.SurveyEnabled {
-			pc.glog.Infof("Survey Enabled for " + so.SourceRef)
+			pc.logger.Infof("Survey Enabled for " + so.SourceRef)
 			if objType == "job_template" {
 				pc.JobTemplateSurvey = append(pc.JobTemplateSurvey, so.SourceRef)
 			} else {
@@ -242,20 +269,20 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 
 	case "inventory":
 		si := &serviceinventory.ServiceInventory{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = pc.serviceinventoryrepo.CreateOrUpdate(ctx, si, obj)
+		err = pc.serviceinventoryrepo.CreateOrUpdate(ctx, pc.logger, si, obj)
 		if err != nil {
-			pc.glog.Errorf("Error adding inventory %s %v", si.SourceRef, err)
+			pc.logger.Errorf("Error adding inventory %s %v", si.SourceRef, err)
 			return err
 		}
 
 	case "workflow_job_template_node":
 		son := &serviceofferingnode.ServiceOfferingNode{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = pc.serviceofferingnoderepo.CreateOrUpdate(ctx, son, obj)
+		err = pc.serviceofferingnoderepo.CreateOrUpdate(ctx, pc.logger, son, obj)
 		if err == serviceofferingnode.ErrIgnoreTowerObject {
-			pc.glog.Info("Ignoring Tower Object")
+			pc.logger.Info("Ignoring Tower Object")
 			return nil
 		} else if err != nil {
-			pc.glog.Errorf("Error adding service offering node %s %v", son.SourceRef, err)
+			pc.logger.Errorf("Error adding service offering node %s %v", son.SourceRef, err)
 			return err
 		}
 
@@ -265,9 +292,9 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
 		sc := &servicecredential.ServiceCredential{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = pc.servicecredentialrepo.CreateOrUpdate(ctx, sc, obj)
+		err = pc.servicecredentialrepo.CreateOrUpdate(ctx, pc.logger, sc, obj)
 		if err != nil {
-			pc.glog.Errorf("Error adding service credential %s", sc.SourceRef)
+			pc.logger.Errorf("Error adding service credential %s", sc.SourceRef)
 			return err
 		}
 
@@ -280,17 +307,17 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		}
 	case "credential_type":
 		sct := &servicecredentialtype.ServiceCredentialType{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
-		err = pc.servicecredentialtyperepo.CreateOrUpdate(ctx, sct, obj)
+		err = pc.servicecredentialtyperepo.CreateOrUpdate(ctx, pc.logger, sct, obj)
 		if err != nil {
-			pc.glog.Errorf("Error adding survey credential type %s", sct.SourceRef)
+			pc.logger.Errorf("Error adding survey credential type %s", sct.SourceRef)
 			return err
 		}
 	case "survey_spec":
 		ss := &serviceplan.ServicePlan{SourceID: pc.Source.ID, TenantID: pc.Tenant.ID}
 
-		err = pc.serviceplanrepo.CreateOrUpdate(ctx, ss, &spec2ddf.Converter{}, obj, r)
+		err = pc.serviceplanrepo.CreateOrUpdate(ctx, pc.logger, ss, &spec2ddf.Converter{}, obj, r)
 		if err != nil {
-			pc.glog.Errorf("Error adding survey spec %s", ss.SourceRef)
+			pc.logger.Errorf("Error adding survey spec %s", ss.SourceRef)
 			return err
 		}
 	}

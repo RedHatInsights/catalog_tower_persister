@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -44,4 +45,9 @@ func MockDBSetup(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 		db.Close()
 	}
 	return gdb, mock, teardown
+}
+
+func TestLogger() *logrus.Entry {
+	logger := logrus.New()
+	return logger.WithFields(logrus.Fields{"request_id": "7888888"})
 }
