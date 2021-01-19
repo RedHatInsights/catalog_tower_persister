@@ -60,7 +60,8 @@ func Get() *TowerPersisterConfig {
 	} else {
 		options.SetDefault("WebPort", 3000)
 		options.SetDefault("MetricsPort", 8080)
-		options.SetDefault("KafkaBrokers", []string{"kafka:29092"})
+		kafkaBroker := fmt.Sprintf("%s:%s", os.Getenv("QUEUE_HOST"), os.Getenv("QUEUE_PORT"))
+		options.SetDefault("KafkaBrokers", []string{kafkaBroker})
 		options.SetDefault("LogGroup", "platform-dev")
 		options.SetDefault("AwsRegion", "us-east-1")
 		options.SetDefault("AwsAccessKeyId", os.Getenv("CW_AWS_ACCESS_KEY_ID"))
