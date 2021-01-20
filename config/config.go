@@ -74,6 +74,7 @@ func Get() *TowerPersisterConfig {
 			options.SetDefault("DatabasePort", port)
 		}
 		options.SetDefault("DatabaseUsername", os.Getenv("DATABASE_USER"))
+		options.SetDefault("DatabasePassword", os.Getenv("DATABASE_PASSWORD"))
 		options.SetDefault("DatabaseName", os.Getenv("DATABASE_NAME"))
 
 	}
