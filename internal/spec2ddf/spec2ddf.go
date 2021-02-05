@@ -105,9 +105,11 @@ func getDDFField(f *field) (*ddfField, error) {
 	} else if f.Type == "integer" {
 		ddff.Type = "number"
 		ddff.DataType = "integer"
+		ddff.Component = "text-field"
 	} else if f.Type == "float" {
 		ddff.Type = "number"
 		ddff.DataType = "float"
+		ddff.Component = "text-field"
 	} else if f.Type == "password" {
 		ddff.Type = "password"
 		ddff.Component = "text-field"
