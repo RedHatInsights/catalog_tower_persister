@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,27 +15,17 @@ import (
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/tenant"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-type RefreshStats struct {
-	bytesReceived     int64
-	refreshStartedAt  time.Time
-	refreshFinishedAt time.Time
-}
-
 type InventoryContext struct {
-	source             *source.Source
-	tenant             *tenant.Tenant
-	dbTransaction      *gorm.DB
-	shutdownReceived   bool
-	timeToWait         time.Duration
-	refreshStats       RefreshStats
-	incrementalRefresh bool
-	lastRefreshTime    time.Time
-	pageContext        *PageContext
-	logger             *logrus.Entry
-	catalogTask        catalogtask.CatalogTask
+	source           *source.Source
+	tenant           *tenant.Tenant
+	dbTransaction    *gorm.DB
+	shutdownReceived bool
+	timeToWait       time.Duration
+	pageContext      *PageContext
+	logger           *logrus.Entry
+	catalogTask      catalogtask.CatalogTask
 }
 
 func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logrus.Entry, message MessagePayload, headers map[string]string, shutdown chan struct{}, wg *sync.WaitGroup) {
@@ -51,8 +40,6 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logru
 
 	inv := InventoryContext{logger: logger}
 	inv.timeToWait = 5 * time.Minute // Wait five minutes for a response
-	inv.refreshStats.refreshStartedAt = time.Now().UTC()
-	inv.refreshStats.bytesReceived = message.Size
 	inv.catalogTask = catalogtask.MakeCatalogTask(ctx, inv.logger, message.TaskURL, headers)
 
 	err := inv.setup(db, message.TenantID, message.SourceID)
@@ -65,16 +52,13 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logru
 	inv.dbTransaction = db.DB.Begin()
 	inv.pageContext = MakePageContext(inv.logger, inv.tenant, inv.source, inv.dbTransaction)
 	err = inv.process(new_ctx, message.DataURL, shutdown)
-	inv.refreshStats.refreshFinishedAt = time.Now().UTC()
 	if err != nil {
 		inv.logger.Errorf("Rolling back database changes %v", err)
 		inv.dbTransaction.Rollback()
-		inv.updateSource(db, message.SourceID, "failed")
 		inv.updateTask("completed", "error", err.Error(), nil)
 	} else {
 		inv.dbTransaction.Commit()
 		inv.logger.Info("Commited database changes")
-		inv.updateSource(db, message.SourceID, "success")
 		inv.updateTask("completed", "ok", "Success", inv.pageContext.GetStats(new_ctx))
 		inv.pageContext.LogReports(new_ctx)
 	}
@@ -94,11 +78,6 @@ func (inv *InventoryContext) setup(db DatabaseContext, tenantID int64, sourceID 
 		return err
 	}
 
-	err = inv.singleRefresh(db)
-	if err != nil {
-		inv.logger.Errorf("Refresh failed %v", err)
-		return err
-	}
 	return nil
 }
 
@@ -182,45 +161,6 @@ func (inv *InventoryContext) findSource(db DatabaseContext, sourceID int64) (*so
 	}
 
 	return &source, nil
-}
-
-func (inv *InventoryContext) singleRefresh(db DatabaseContext) error {
-	// Only one refresh for a source should be active
-	// https://stackoverflow.com/questions/60331946/maintain-integrity-on-concurrent-updates-of-the-same-row/60335740#60335740
-	if inv.source.RefreshState == "active" {
-		return fmt.Errorf("A refresh is active for this source which was started at : %v", inv.source.RefreshStartedAt)
-	}
-	if inv.source.RefreshState == "success" && inv.source.LastSuccessfulRefreshAt.Valid {
-		inv.incrementalRefresh = true
-		inv.lastRefreshTime = inv.source.LastSuccessfulRefreshAt.Time
-	}
-
-	inv.source.RefreshStartedAt = sql.NullTime{Valid: true, Time: inv.refreshStats.refreshStartedAt}
-	inv.source.RefreshFinishedAt = sql.NullTime{}
-	inv.source.RefreshState = "active"
-	//db.DB.Save(&inv.Source)
-	result := db.DB.Clauses(clause.Locking{Strength: "UPDATE", Options: "NOWAIT"}).Find(&source.Source{ID: inv.source.ID}).Updates(inv.source)
-	if result.Error != nil {
-		inv.logger.Errorf("Error locking source %d %v", inv.source.ID, result.Error)
-		return result.Error
-	}
-	return nil
-}
-
-func (inv *InventoryContext) updateSource(db DatabaseContext, sourceID int64, state string) error {
-	source := source.Source{ID: sourceID, TenantID: inv.tenant.ID}
-	result := db.DB.Where(&source).First(&source)
-	if result.Error == nil {
-		source.RefreshFinishedAt = sql.NullTime{Valid: true, Time: inv.refreshStats.refreshFinishedAt}
-		source.BytesReceived = inv.refreshStats.bytesReceived
-		source.RefreshState = state
-		if state == "success" {
-			source.LastSuccessfulRefreshAt = sql.NullTime{Valid: true, Time: inv.refreshStats.refreshStartedAt}
-		}
-		inv.logger.Infof("Source Info %v", source)
-		db.DB.Save(&source)
-	}
-	return result.Error
 }
 
 func (inv *InventoryContext) updateTask(state, status, msg string, stats map[string]interface{}) error {
