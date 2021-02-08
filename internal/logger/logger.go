@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -111,6 +112,7 @@ func InitLogger() *logrus.Logger {
 	}
 
 	if key != "" {
+		fmt.Println("Initializing Cloud Watch")
 		cred := credentials.NewStaticCredentials(key, secret, "")
 		awsconf := aws.NewConfig().WithRegion(region).WithCredentials(cred)
 		hook, err := lc.NewBatchingHook(group, stream, awsconf, 10*time.Second)
