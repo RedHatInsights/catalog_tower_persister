@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -125,9 +126,23 @@ func processMessage(ctx context.Context, dbContext DatabaseContext, logger *logr
 		logEntry.Errorf("Error parsing message" + err.Error())
 	} else {
 		logEntry.Info("Received Kafka Message")
-		logEntry.Infof("#goroutines: %d", runtime.NumGoroutine())
+		logEntry.Info(stats())
 		wg.Add(1)
 		ctx := context.Background()
 		go startInventoryWorker(ctx, dbContext, logEntry, messagePayload, messageHeaders, shutdown, wg)
 	}
+}
+
+// stats
+func stats() string {
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+
+	return fmt.Sprintf("Current Stats Alloc = %v MiB TotalAlloc = %v MiB Sys = %v MiB NumGC = %v NumGoroutine = %v",
+		bToMb(ms.Alloc), bToMb(ms.TotalAlloc), bToMb(ms.Sys), ms.NumGC, runtime.NumGoroutine())
+
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
