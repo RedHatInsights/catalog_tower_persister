@@ -166,7 +166,7 @@ func (inv *InventoryContext) findSource(db DatabaseContext, sourceID int64) (*so
 func (inv *InventoryContext) updateTask(state, status, msg string, stats map[string]interface{}) error {
 	data := map[string]interface{}{"status": status, "state": state, "message": msg}
 	if stats != nil {
-		data["output"] = stats
+		data["output"] = map[string]interface{}{"stats": stats}
 	}
 	err := inv.catalogTask.Update(data, &http.Client{})
 	if err != nil {
