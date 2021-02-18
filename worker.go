@@ -168,6 +168,10 @@ func (inv *InventoryContext) updateTask(state, status, msg string, stats map[str
 	if stats != nil {
 		data["output"] = map[string]interface{}{"stats": stats}
 	}
+
+	if status == "error" {
+		data["output"] = map[string]interface{}{"errors": []string{msg}}
+	}
 	err := inv.catalogTask.Update(data, &http.Client{})
 	if err != nil {
 		inv.logger.Errorf("Error updating catalog task %v", err)
