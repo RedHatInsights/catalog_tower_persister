@@ -1,5 +1,5 @@
 SRC_FILES= catalog_tower_persister.go\
-	   worker.go \
+	   persister_worker.go \
 	   delete_handler.go \
 	   link_handler.go \
 	   page_handler.go \
