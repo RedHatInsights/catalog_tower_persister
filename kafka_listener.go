@@ -26,7 +26,6 @@ type MessagePayload struct {
 }
 
 func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdown chan struct{}, wg *sync.WaitGroup) {
-
 	cfg := config.Get()
 	defer logger.Info("Kafka Listener exiting")
 	defer wg.Done()
@@ -45,9 +44,9 @@ func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdo
 		if ke, ok := err.(kafka.Error); ok == true {
 			switch ec := ke.Code(); ec {
 			case kafka.ErrInvalidArg:
-				logger.Errorf("Invalid args to configure kafka code %d %v", ec, err)
+				logger.Errorf("Invalid args to configure Kafka consumer. Code %d %v", ec, err)
 			default:
-				logger.Errorf("Error creating Kafka consure code %d %v", ec, err)
+				logger.Errorf("Error creating Kafka consumer. Code %d %v", ec, err)
 			}
 		} else {
 			// It's not a kafka.Error
@@ -57,54 +56,11 @@ func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdo
 	} else {
 		if err := c.Subscribe(cfg.KafkaTopic, nil); err != nil {
 			logger.Errorf("Error subscribing to topic %v", err)
-
 		} else {
-			doTerm := false
-			for !doTerm {
-				select {
-				case <-shutdown:
-					doTerm = true
-					break
-				default:
-					if ev := c.Poll(1000); ev == nil {
-						continue
-					} else {
-						switch ev.(type) {
-
-						case *kafka.Message:
-							km := ev.(*kafka.Message)
-
-							processMessage(ctx, dbContext, logger, shutdown, wg, km)
-						case kafka.PartitionEOF:
-							pe := ev.(kafka.PartitionEOF)
-							doTerm = true
-							logger.Infof("Got to the end of partition %v on topic %v at offset %v\n",
-
-								pe.Partition,
-								string(*pe.Topic),
-								pe.Offset)
-							break
-
-						case kafka.OffsetsCommitted:
-							continue
-
-						case kafka.Error:
-							em := ev.(kafka.Error)
-							logger.Infof("Kafka error %v", em)
-
-						default:
-							logger.Infof("Got an event that's not a Message, Error, or PartitionEOF %v", ev)
-
-						}
-
-					}
-				}
-			}
-			logger.Info("Closing Kafka Channel")
-			c.Close()
+			handleMessages(ctx, c, dbContext, logger, shutdown, wg)
 		}
 	}
-
+	c.Close()
 }
 
 func processMessage(ctx context.Context, dbContext DatabaseContext, logger *logrus.Logger, shutdown chan struct{}, wg *sync.WaitGroup, km *kafka.Message) {
@@ -130,7 +86,7 @@ func processMessage(ctx context.Context, dbContext DatabaseContext, logger *logr
 		logEntry.Info(stats())
 		wg.Add(1)
 		ctx := context.Background()
-		go startInventoryWorker(ctx, dbContext, logEntry, messagePayload, messageHeaders, shutdown, wg)
+		go startPersisterWorker(ctx, dbContext, logEntry, messagePayload, messageHeaders, shutdown, wg)
 	}
 }
 
@@ -144,6 +100,50 @@ func stats() string {
 
 }
 
+// bToMb convert bytes to megabytes
 func bToMb(b uint64) uint64 {
 	return b / 1024 / 1024
+}
+
+// handleMessages handle Kafka Messages coming from Catalog Inventory API
+func handleMessages(ctx context.Context, c *kafka.Consumer, dbContext DatabaseContext, logger *logrus.Logger, shutdown chan struct{}, wg *sync.WaitGroup) {
+	terminate := false
+	for !terminate {
+		select {
+		case <-shutdown:
+			terminate = true
+			break
+		default:
+			if ev := c.Poll(1000); ev == nil {
+				continue
+			} else {
+				switch ev.(type) {
+
+				case *kafka.Message:
+					km := ev.(*kafka.Message)
+					processMessage(ctx, dbContext, logger, shutdown, wg, km)
+
+				case kafka.PartitionEOF:
+					pe := ev.(kafka.PartitionEOF)
+					terminate = true
+					logger.Infof("Got to the end of partition %v on topic %v at offset %v\n",
+						pe.Partition,
+						string(*pe.Topic),
+						pe.Offset)
+					break
+
+				case kafka.OffsetsCommitted:
+					continue
+
+				case kafka.Error:
+					em := ev.(kafka.Error)
+					logger.Infof("Kafka error %v", em)
+
+				default:
+					logger.Infof("Got an event that's not a Message, Error, or PartitionEOF %v", ev)
+
+				}
+			}
+		}
+	}
 }
