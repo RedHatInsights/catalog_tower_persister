@@ -22,7 +22,6 @@ func (a AnyTime) Match(v driver.Value) bool {
 }
 
 // AnyJSONB is an empty map[string]interface{} to match JSONB
-
 type AnyJSONB map[string]interface{}
 
 // Match satisfies sqlmock.Argument interface
@@ -47,6 +46,7 @@ func MockDBSetup(t *testing.T) (*gorm.DB, sqlmock.Sqlmock, func()) {
 	return gdb, mock, teardown
 }
 
+// TestLogger creates a bogus entry
 func TestLogger() *logrus.Entry {
 	logger := logrus.New()
 	return logger.WithFields(logrus.Fields{"request_id": "7888888"})

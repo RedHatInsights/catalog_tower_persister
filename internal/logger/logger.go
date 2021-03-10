@@ -81,7 +81,7 @@ func InitLogger() *logrus.Logger {
 
 	cfg := config.Get()
 	logconfig := viper.New()
-	key := cfg.AwsAccessKeyId
+	key := cfg.AwsAccessKeyID
 	secret := cfg.AwsSecretAccessKey
 	region := cfg.AwsRegion
 	group := cfg.LogGroup

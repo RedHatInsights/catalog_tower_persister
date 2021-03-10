@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type InventoryContext struct {
+type inventoryContext struct {
 	source           *source.Source
 	tenant           *tenant.Tenant
 	dbTransaction    *gorm.DB
@@ -35,10 +35,10 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logru
 	defer wg.Done()
 	logger.Info("Starting Inventory Worker")
 	duration := 15 * time.Minute
-	new_ctx, cancel := context.WithTimeout(context.Background(), duration)
+	newCtx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
-	inv := InventoryContext{logger: logger}
+	inv := inventoryContext{logger: logger}
 	inv.timeToWait = 5 * time.Minute // Wait five minutes for a response
 	inv.catalogTask = catalogtask.MakeCatalogTask(ctx, inv.logger, message.TaskURL, headers)
 
@@ -51,7 +51,7 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logru
 	inv.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
 	inv.dbTransaction = db.DB.Begin()
 	inv.pageContext = MakePageContext(inv.logger, inv.tenant, inv.source, inv.dbTransaction)
-	err = inv.process(new_ctx, message.DataURL, shutdown)
+	err = inv.process(newCtx, message.DataURL, shutdown)
 	if err != nil {
 		inv.logger.Errorf("Rolling back database changes %v", err)
 		inv.dbTransaction.Rollback()
@@ -59,12 +59,12 @@ func startInventoryWorker(ctx context.Context, db DatabaseContext, logger *logru
 	} else {
 		inv.dbTransaction.Commit()
 		inv.logger.Info("Commited database changes")
-		inv.updateTask("completed", "ok", "Success", inv.pageContext.GetStats(new_ctx))
-		inv.pageContext.LogReports(new_ctx)
+		inv.updateTask("completed", "ok", "Success", inv.pageContext.GetStats(newCtx))
+		inv.pageContext.LogReports(newCtx)
 	}
 }
 
-func (inv *InventoryContext) setup(db DatabaseContext, tenantID int64, sourceID int64) error {
+func (inv *inventoryContext) setup(db DatabaseContext, tenantID int64, sourceID int64) error {
 	var err error
 	inv.tenant, err = inv.findTenant(db, tenantID)
 	if err != nil {
@@ -81,7 +81,7 @@ func (inv *InventoryContext) setup(db DatabaseContext, tenantID int64, sourceID 
 	return nil
 }
 
-func (inv *InventoryContext) process(ctx context.Context, url string, shutdown chan struct{}) error {
+func (inv *inventoryContext) process(ctx context.Context, url string, shutdown chan struct{}) error {
 
 	inv.logger.Infof("Fetching URL %s", url)
 
@@ -128,14 +128,14 @@ func (inv *InventoryContext) process(ctx context.Context, url string, shutdown c
 
 }
 
-func (inv *InventoryContext) postProcess(ctx context.Context) error {
-	lh := LinkHandler{PC: inv.pageContext}
+func (inv *inventoryContext) postProcess(ctx context.Context) error {
+	lh := LinkHandler{pageContext: inv.pageContext}
 	err := lh.Process()
 	if err != nil {
 		inv.logger.Errorf("Error in linking objects %v", err)
 		return err
 	}
-	dh := DeleteHandler{PC: inv.pageContext}
+	dh := DeleteHandler{pageContext: inv.pageContext}
 	err = dh.Process(ctx)
 	if err != nil {
 		inv.logger.Errorf("Error in linking objects %v", err)
@@ -144,7 +144,7 @@ func (inv *InventoryContext) postProcess(ctx context.Context) error {
 	return nil
 }
 
-func (inv *InventoryContext) findTenant(db DatabaseContext, tenantID int64) (*tenant.Tenant, error) {
+func (inv *inventoryContext) findTenant(db DatabaseContext, tenantID int64) (*tenant.Tenant, error) {
 	tenant := tenant.Tenant{}
 	err := db.DB.First(&tenant, tenantID).Error
 	if err != nil {
@@ -153,7 +153,7 @@ func (inv *InventoryContext) findTenant(db DatabaseContext, tenantID int64) (*te
 	return &tenant, nil
 }
 
-func (inv *InventoryContext) findSource(db DatabaseContext, sourceID int64) (*source.Source, error) {
+func (inv *inventoryContext) findSource(db DatabaseContext, sourceID int64) (*source.Source, error) {
 	source := source.Source{}
 	err := db.DB.First(&source, sourceID).Error
 	if err != nil {
@@ -163,7 +163,7 @@ func (inv *InventoryContext) findSource(db DatabaseContext, sourceID int64) (*so
 	return &source, nil
 }
 
-func (inv *InventoryContext) updateTask(state, status, msg string, stats map[string]interface{}) error {
+func (inv *inventoryContext) updateTask(state, status, msg string, stats map[string]interface{}) error {
 	data := map[string]interface{}{"status": status, "state": state, "message": msg}
 	if stats != nil {
 		data["output"] = map[string]interface{}{"stats": stats}

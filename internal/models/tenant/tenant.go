@@ -1,11 +1,8 @@
 package tenant
 
-import "time"
-
+// Tenant Definition
 type Tenant struct {
 	ID             int64 `gorm:"primaryKey"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
 	Name           string
 	ExternalTenant string
 	Description    string
