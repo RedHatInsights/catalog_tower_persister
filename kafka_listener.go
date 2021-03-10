@@ -16,6 +16,7 @@ import (
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
+//MessagePayload stores the information sent from the Catalog Inventory API Service
 type MessagePayload struct {
 	TenantID int64  `json:"tenant_id"`
 	SourceID int64  `json:"source_id"`

@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
+//DatabaseContext used to store the DB being used
 type DatabaseContext struct {
 	DB *gorm.DB
 }

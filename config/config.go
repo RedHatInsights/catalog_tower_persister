@@ -30,7 +30,7 @@ type TowerPersisterConfig struct {
 	LogGroup             string
 	LogLevel             string
 	AwsRegion            string
-	AwsAccessKeyId       string
+	AwsAccessKeyID       string
 	AwsSecretAccessKey   string
 	Debug                bool
 	DebugUserAgent       *regexp.Regexp
@@ -55,7 +55,7 @@ func Get() *TowerPersisterConfig {
 		options.SetDefault("KafkaBrokers", fmt.Sprintf("%s:%v", cfg.Kafka.Brokers[0].Hostname, *cfg.Kafka.Brokers[0].Port))
 		options.SetDefault("LogGroup", cfg.Logging.Cloudwatch.LogGroup)
 		options.SetDefault("AwsRegion", cfg.Logging.Cloudwatch.Region)
-		options.SetDefault("AwsAccessKeyId", cfg.Logging.Cloudwatch.AccessKeyId)
+		options.SetDefault("AwsAccessKeyID", cfg.Logging.Cloudwatch.AccessKeyId)
 		options.SetDefault("AwsSecretAccessKey", cfg.Logging.Cloudwatch.SecretAccessKey)
 	} else {
 		options.SetDefault("WebPort", 3000)
@@ -64,7 +64,7 @@ func Get() *TowerPersisterConfig {
 		options.SetDefault("KafkaBrokers", []string{kafkaBroker})
 		options.SetDefault("LogGroup", "platform-dev")
 		options.SetDefault("AwsRegion", "us-east-1")
-		options.SetDefault("AwsAccessKeyId", os.Getenv("CW_AWS_ACCESS_KEY_ID"))
+		options.SetDefault("AwsAccessKeyID", os.Getenv("CW_AWS_ACCESS_KEY_ID"))
 		options.SetDefault("AwsSecretAccessKey", os.Getenv("CW_AWS_SECRET_ACCESS_KEY"))
 		options.SetDefault("DatabaseHostname", os.Getenv("DATABASE_HOST"))
 		port, err := strconv.Atoi(os.Getenv("DATABASE_PORT"))
@@ -113,7 +113,7 @@ func Get() *TowerPersisterConfig {
 		LogGroup:             options.GetString("LogGroup"),
 		LogLevel:             options.GetString("LogLevel"),
 		AwsRegion:            options.GetString("AwsRegion"),
-		AwsAccessKeyId:       options.GetString("AwsAccessKeyId"),
+		AwsAccessKeyID:       options.GetString("AwsAccessKeyId"),
 		AwsSecretAccessKey:   options.GetString("AwsSecretAccessKey"),
 		UseClowder:           os.Getenv("CLOWDER_ENABLED") == "true",
 	}
