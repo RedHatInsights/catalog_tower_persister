@@ -133,10 +133,9 @@ func (pc *persisterContext) postProcess(ctx context.Context) error {
 		pc.logger.Errorf("Error in linking objects %v", err)
 		return err
 	}
-	dh := DeleteHandler{pageContext: pc.pageContext}
-	err = dh.Process(ctx)
+	err = pc.pageContext.ProcessDeletes(ctx)
 	if err != nil {
-		pc.logger.Errorf("Error in linking objects %v", err)
+		pc.logger.Errorf("Error in deleting objects %v", err)
 		return err
 	}
 	return nil

@@ -1,6 +1,6 @@
 SRC_FILES= catalog_tower_persister.go\
 	   persister_worker.go \
-	   delete_handler.go \
+	   process_deletes.go \
 	   link_handler.go \
 	   page_handler.go \
 	   kafka_listener.go
