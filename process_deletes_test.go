@@ -28,8 +28,7 @@ func TestDeletes(t *testing.T) {
 		pc := MakePageContext(testhelper.TestLogger(), &testTenant, &testSource, repos)
 		err := pc.Process(ctx, tt.url, strings.NewReader(tt.data))
 		assert.Nil(t, err, tt.url)
-		dh := DeleteHandler{pageContext: pc}
-		err = dh.Process(ctx)
+		err = pc.ProcessDeletes(ctx)
 		assert.Nil(t, err, tt.url)
 	}
 }
@@ -42,8 +41,7 @@ func TestDeleteErrors(t *testing.T) {
 		pc := MakePageContext(testhelper.TestLogger(), &testTenant, &testSource, repos)
 		err := pc.Process(ctx, tt.url, strings.NewReader(tt.data))
 		assert.Nil(t, err, tt.url)
-		dh := DeleteHandler{pageContext: pc}
-		err = dh.Process(ctx)
+		err = pc.ProcessDeletes(ctx)
 		assert.NotNil(t, err, tt.url)
 		if !strings.Contains(err.Error(), "Kaboom") {
 			t.Fatalf("Error message should have contained kaboom")
