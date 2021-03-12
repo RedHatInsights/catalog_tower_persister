@@ -30,12 +30,22 @@ type WorkflowNode struct {
 	UnifiedJobType               string
 }
 
+type objectRepos struct {
+	servicecredentialrepo     servicecredential.Repository
+	servicecredentialtyperepo servicecredentialtype.Repository
+	serviceinventoryrepo      serviceinventory.Repository
+	serviceplanrepo           serviceplan.Repository
+	serviceofferingrepo       serviceoffering.Repository
+	serviceofferingnoderepo   serviceofferingnode.Repository
+}
+
 // PageContext stores the cumulative information about all pages that we read from
 // the tar file
 type PageContext struct {
 	logger                               *logrus.Entry
 	tenant                               *tenant.Tenant
 	source                               *source.Source
+	repos                                *objectRepos
 	inventoryMap                         map[string][]int64
 	serviceCredentialToCredentialTypeMap map[string][]int64
 	jobTemplateSurvey                    []string
@@ -46,13 +56,6 @@ type PageContext struct {
 	credentialSourceRefs                 []string
 	credentialTypeSourceRefs             []string
 	workflowNodeSourceRefs               []string
-	dbTransaction                        *gorm.DB
-	servicecredentialrepo                servicecredential.Repository
-	servicecredentialtyperepo            servicecredentialtype.Repository
-	serviceinventoryrepo                 serviceinventory.Repository
-	serviceplanrepo                      serviceplan.Repository
-	serviceofferingrepo                  serviceoffering.Repository
-	serviceofferingnoderepo              serviceofferingnode.Repository
 }
 
 // pageResponse stores the response from the Ansible Tower API call which
@@ -63,21 +66,26 @@ var surveySpecRe = regexp.MustCompile(`api\/v2\/(job_templates|workflow_job_temp
 
 var objTypeRe = regexp.MustCompile(`\/api\/v2\/(.*)\/`)
 
+func defaultObjectRepos(dbTransaction *gorm.DB) *objectRepos {
+	return &objectRepos{
+		servicecredentialrepo:     servicecredential.NewGORMRepository(dbTransaction),
+		servicecredentialtyperepo: servicecredentialtype.NewGORMRepository(dbTransaction),
+		serviceinventoryrepo:      serviceinventory.NewGORMRepository(dbTransaction),
+		serviceplanrepo:           serviceplan.NewGORMRepository(dbTransaction),
+		serviceofferingrepo:       serviceoffering.NewGORMRepository(dbTransaction),
+		serviceofferingnoderepo:   serviceofferingnode.NewGORMRepository(dbTransaction),
+	}
+}
+
 // MakePageContext creates a PageContext
-func MakePageContext(logger *logrus.Entry, tenant *tenant.Tenant, source *source.Source, dbTransaction *gorm.DB) *PageContext {
+func MakePageContext(logger *logrus.Entry, tenant *tenant.Tenant, source *source.Source, repos *objectRepos) *PageContext {
 	pc := PageContext{
-		tenant:        tenant,
-		source:        source,
-		dbTransaction: dbTransaction,
-		logger:        logger}
+		tenant: tenant,
+		source: source,
+		repos:  repos,
+		logger: logger}
 	pc.inventoryMap = make(map[string][]int64)
 	pc.serviceCredentialToCredentialTypeMap = make(map[string][]int64)
-	pc.servicecredentialrepo = servicecredential.NewGORMRepository(dbTransaction)
-	pc.servicecredentialtyperepo = servicecredentialtype.NewGORMRepository(dbTransaction)
-	pc.serviceinventoryrepo = serviceinventory.NewGORMRepository(dbTransaction)
-	pc.serviceplanrepo = serviceplan.NewGORMRepository(dbTransaction)
-	pc.serviceofferingrepo = serviceoffering.NewGORMRepository(dbTransaction)
-	pc.serviceofferingnoderepo = serviceofferingnode.NewGORMRepository(dbTransaction)
 	return &pc
 }
 
@@ -137,29 +145,29 @@ func (pc *PageContext) Process(ctx context.Context, url string, r io.Reader) err
 // Catalog Inventory API
 func (pc *PageContext) GetStats(ctx context.Context) map[string]interface{} {
 	stats := map[string]interface{}{
-		"credentials":            pc.servicecredentialrepo.Stats(),
-		"credential_types":       pc.servicecredentialrepo.Stats(),
-		"inventories":            pc.serviceinventoryrepo.Stats(),
-		"service_plans":          pc.serviceplanrepo.Stats(),
-		"service_offering":       pc.serviceofferingrepo.Stats(),
-		"service_offering_nodes": pc.serviceofferingnoderepo.Stats(),
+		"credentials":            pc.repos.servicecredentialrepo.Stats(),
+		"credential_types":       pc.repos.servicecredentialrepo.Stats(),
+		"inventories":            pc.repos.serviceinventoryrepo.Stats(),
+		"service_plans":          pc.repos.serviceplanrepo.Stats(),
+		"service_offering":       pc.repos.serviceofferingrepo.Stats(),
+		"service_offering_nodes": pc.repos.serviceofferingnoderepo.Stats(),
 	}
 	return stats
 }
 
 // LogReports log the objects added/updated/deleted
 func (pc *PageContext) LogReports(ctx context.Context) {
-	x := pc.servicecredentialrepo.Stats()
+	x := pc.repos.servicecredentialrepo.Stats()
 	pc.logger.Info(fmt.Sprintf("Credential Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
-	x = pc.servicecredentialrepo.Stats()
+	x = pc.repos.servicecredentialrepo.Stats()
 	pc.logger.Info(fmt.Sprintf("Credential Type Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
-	x = pc.serviceinventoryrepo.Stats()
+	x = pc.repos.serviceinventoryrepo.Stats()
 	pc.logger.Info(fmt.Sprintf("Inventory Type Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
-	x = pc.serviceplanrepo.Stats()
+	x = pc.repos.serviceplanrepo.Stats()
 	pc.logger.Info(fmt.Sprintf("Service Plan Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
-	x = pc.serviceofferingrepo.Stats()
+	x = pc.repos.serviceofferingrepo.Stats()
 	pc.logger.Info(fmt.Sprintf("Service Offering Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
-	x = pc.serviceofferingnoderepo.Stats()
+	x = pc.repos.serviceofferingnoderepo.Stats()
 	pc.logger.Info(fmt.Sprintf("Service Offering Node Add %d Updates %d Deletes %d", x["adds"], x["updates"], x["deletes"]))
 }
 
@@ -255,13 +263,13 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 	}
 
 	pc.logger.Infof("Object Type %s Source Ref %s", obj["type"].(string), obj["id"].(json.Number).String())
-
+	srcRef := obj["id"].(json.Number).String()
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":
 		so := &serviceoffering.ServiceOffering{SourceID: pc.source.ID, TenantID: pc.tenant.ID}
-		err = pc.serviceofferingrepo.CreateOrUpdate(ctx, pc.logger, so, obj, pc.serviceplanrepo)
+		err = pc.repos.serviceofferingrepo.CreateOrUpdate(ctx, pc.logger, so, obj, pc.repos.serviceplanrepo)
 		if err != nil {
-			pc.logger.Errorf("Error adding job template %s %v", so.SourceRef, err)
+			pc.logger.Errorf("Error adding %s:%s %v", objType, srcRef, err)
 			return err
 		}
 
@@ -284,20 +292,20 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 
 	case "inventory":
 		si := &serviceinventory.ServiceInventory{SourceID: pc.source.ID, TenantID: pc.tenant.ID}
-		err = pc.serviceinventoryrepo.CreateOrUpdate(ctx, pc.logger, si, obj)
+		err = pc.repos.serviceinventoryrepo.CreateOrUpdate(ctx, pc.logger, si, obj)
 		if err != nil {
-			pc.logger.Errorf("Error adding inventory %s %v", si.SourceRef, err)
+			pc.logger.Errorf("Error adding %s:%s %v", objType, srcRef, err)
 			return err
 		}
 
 	case "workflow_job_template_node":
 		son := &serviceofferingnode.ServiceOfferingNode{SourceID: pc.source.ID, TenantID: pc.tenant.ID}
-		err = pc.serviceofferingnoderepo.CreateOrUpdate(ctx, pc.logger, son, obj)
+		err = pc.repos.serviceofferingnoderepo.CreateOrUpdate(ctx, pc.logger, son, obj)
 		if err == serviceofferingnode.ErrIgnoreTowerObject {
 			pc.logger.Info("Ignoring Tower Object")
 			return nil
 		} else if err != nil {
-			pc.logger.Errorf("Error adding service offering node %s %v", son.SourceRef, err)
+			pc.logger.Errorf("Error adding %s:%s %v", objType, srcRef, err)
 			return err
 		}
 
@@ -307,9 +315,9 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 			UnifiedJobType:               son.UnifiedJobType})
 	case "credential":
 		sc := &servicecredential.ServiceCredential{SourceID: pc.source.ID, TenantID: pc.tenant.ID}
-		err = pc.servicecredentialrepo.CreateOrUpdate(ctx, pc.logger, sc, obj)
+		err = pc.repos.servicecredentialrepo.CreateOrUpdate(ctx, pc.logger, sc, obj)
 		if err != nil {
-			pc.logger.Errorf("Error adding service credential %s", sc.SourceRef)
+			pc.logger.Errorf("Error adding %s:%s %v", objType, srcRef, err)
 			return err
 		}
 
@@ -322,17 +330,17 @@ func (pc *PageContext) addObject(ctx context.Context, obj map[string]interface{}
 		}
 	case "credential_type":
 		sct := &servicecredentialtype.ServiceCredentialType{SourceID: pc.source.ID, TenantID: pc.tenant.ID}
-		err = pc.servicecredentialtyperepo.CreateOrUpdate(ctx, pc.logger, sct, obj)
+		err = pc.repos.servicecredentialtyperepo.CreateOrUpdate(ctx, pc.logger, sct, obj)
 		if err != nil {
-			pc.logger.Errorf("Error adding survey credential type %s", sct.SourceRef)
+			pc.logger.Errorf("Error adding %s:%s %v", objType, srcRef, err)
 			return err
 		}
 	case "survey_spec":
 		ss := &serviceplan.ServicePlan{SourceID: pc.source.ID, TenantID: pc.tenant.ID}
 
-		err = pc.serviceplanrepo.CreateOrUpdate(ctx, pc.logger, ss, &spec2ddf.Converter{}, obj, r)
+		err = pc.repos.serviceplanrepo.CreateOrUpdate(ctx, pc.logger, ss, &spec2ddf.Converter{}, obj, r)
 		if err != nil {
-			pc.logger.Errorf("Error adding survey spec %s", ss.SourceRef)
+			pc.logger.Errorf("Error adding %s:%s %v", objType, srcRef, err)
 			return err
 		}
 	}
