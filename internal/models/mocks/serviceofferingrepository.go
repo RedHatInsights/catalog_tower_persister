@@ -12,21 +12,22 @@ type MockServiceOfferingRepository struct {
 	DeletesCalled int
 	AddsCalled    int
 	UpdatesCalled int
-	Error         error
+	AddError      error
+	DeleteError   error
 }
 
 func (msor *MockServiceOfferingRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, so *serviceoffering.ServiceOffering, keepSourceRefs []string, spr serviceplan.Repository) error {
-	if msor.Error == nil {
+	if msor.DeleteError == nil {
 		msor.DeletesCalled++
 	}
-	return msor.Error
+	return msor.DeleteError
 }
 
 func (msor *MockServiceOfferingRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, so *serviceoffering.ServiceOffering, attrs map[string]interface{}, spr serviceplan.Repository) error {
-	if msor.Error == nil {
+	if msor.AddError == nil {
 		msor.AddsCalled++
 	}
-	return msor.Error
+	return msor.AddError
 }
 
 func (msor *MockServiceOfferingRepository) Stats() map[string]int {

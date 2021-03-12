@@ -11,21 +11,22 @@ type MockServiceInventoryRepository struct {
 	DeletesCalled int
 	AddsCalled    int
 	UpdatesCalled int
-	Error         error
+	AddError      error
+	DeleteError   error
 }
 
 func (msir *MockServiceInventoryRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, si *serviceinventory.ServiceInventory, keepSourceRefs []string) error {
-	if msir.Error == nil {
+	if msir.DeleteError == nil {
 		msir.DeletesCalled++
 	}
-	return msir.Error
+	return msir.DeleteError
 }
 
 func (msir *MockServiceInventoryRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, si *serviceinventory.ServiceInventory, attrs map[string]interface{}) error {
-	if msir.Error == nil {
+	if msir.AddError == nil {
 		msir.AddsCalled++
 	}
-	return msir.Error
+	return msir.AddError
 }
 
 func (msir *MockServiceInventoryRepository) Stats() map[string]int {

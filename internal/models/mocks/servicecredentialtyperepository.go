@@ -11,21 +11,22 @@ type MockServiceCredentialTypeRepository struct {
 	DeletesCalled int
 	AddsCalled    int
 	UpdatesCalled int
-	Error         error
+	AddError      error
+	DeleteError   error
 }
 
 func (msctr *MockServiceCredentialTypeRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, sct *servicecredentialtype.ServiceCredentialType, keepSourceRefs []string) error {
-	if msctr.Error == nil {
+	if msctr.DeleteError == nil {
 		msctr.DeletesCalled++
 	}
-	return msctr.Error
+	return msctr.DeleteError
 }
 
 func (msctr *MockServiceCredentialTypeRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sct *servicecredentialtype.ServiceCredentialType, attrs map[string]interface{}) error {
-	if msctr.Error == nil {
+	if msctr.AddError == nil {
 		msctr.AddsCalled++
 	}
-	return msctr.Error
+	return msctr.AddError
 }
 
 func (msctr *MockServiceCredentialTypeRepository) Stats() map[string]int {

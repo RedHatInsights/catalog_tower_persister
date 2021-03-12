@@ -12,21 +12,22 @@ type MockServicePlanRepository struct {
 	DeletesCalled int
 	AddsCalled    int
 	UpdatesCalled int
-	Error         error
+	AddError      error
+	DeleteError   error
 }
 
 func (mspr *MockServicePlanRepository) Delete(ctx context.Context, logger *logrus.Entry, sp *serviceplan.ServicePlan) error {
-	if mspr.Error == nil {
+	if mspr.DeleteError == nil {
 		mspr.DeletesCalled++
 	}
-	return mspr.Error
+	return mspr.DeleteError
 }
 
 func (mspr *MockServicePlanRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sp *serviceplan.ServicePlan, converter serviceplan.DDFConverter, attrs map[string]interface{}, r io.Reader) error {
-	if mspr.Error == nil {
+	if mspr.AddError == nil {
 		mspr.AddsCalled++
 	}
-	return mspr.Error
+	return mspr.AddError
 }
 
 func (mspr *MockServicePlanRepository) Stats() map[string]int {
