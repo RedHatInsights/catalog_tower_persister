@@ -11,21 +11,22 @@ type MockServiceOfferingNodeRepository struct {
 	DeletesCalled int
 	AddsCalled    int
 	UpdatesCalled int
-	Error         error
+	AddError      error
+	DeleteError   error
 }
 
 func (msonr *MockServiceOfferingNodeRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, son *serviceofferingnode.ServiceOfferingNode, keepSourceRefs []string) error {
-	if msonr.Error == nil {
+	if msonr.DeleteError == nil {
 		msonr.DeletesCalled++
 	}
-	return msonr.Error
+	return msonr.DeleteError
 }
 
 func (msonr *MockServiceOfferingNodeRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, son *serviceofferingnode.ServiceOfferingNode, attrs map[string]interface{}) error {
-	if msonr.Error == nil {
+	if msonr.AddError == nil {
 		msonr.AddsCalled++
 	}
-	return msonr.Error
+	return msonr.AddError
 }
 
 func (msonr *MockServiceOfferingNodeRepository) Stats() map[string]int {
