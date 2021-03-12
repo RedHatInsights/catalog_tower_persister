@@ -48,7 +48,7 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	}
 	pc.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
 	pc.dbTransaction = db.DB.Begin()
-	pc.pageContext = MakePageContext(pc.logger, pc.tenant, pc.source, pc.dbTransaction)
+	pc.pageContext = MakePageContext(pc.logger, pc.tenant, pc.source, defaultObjectRepos(pc.dbTransaction))
 	err = pc.process(newCtx, message.DataURL, shutdown)
 	if err != nil {
 		pc.logger.Errorf("Rolling back database changes %v", err)
@@ -127,7 +127,7 @@ func (pc *persisterContext) process(ctx context.Context, url string, shutdown ch
 }
 
 func (pc *persisterContext) postProcess(ctx context.Context) error {
-	lh := LinkHandler{pageContext: pc.pageContext}
+	lh := LinkHandler{pageContext: pc.pageContext, dbTransaction: pc.dbTransaction}
 	err := lh.Process()
 	if err != nil {
 		pc.logger.Errorf("Error in linking objects %v", err)
