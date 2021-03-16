@@ -57,6 +57,7 @@ func Get() *TowerPersisterConfig {
 		options.SetDefault("AwsRegion", cfg.Logging.Cloudwatch.Region)
 		options.SetDefault("AwsAccessKeyID", cfg.Logging.Cloudwatch.AccessKeyId)
 		options.SetDefault("AwsSecretAccessKey", cfg.Logging.Cloudwatch.SecretAccessKey)
+		options.SetDefault("KafkaTopic", cfg.Kafka.Topics[0].Name)
 	} else {
 		options.SetDefault("WebPort", 3000)
 		options.SetDefault("MetricsPort", 8080)
@@ -76,10 +77,9 @@ func Get() *TowerPersisterConfig {
 		options.SetDefault("DatabaseUsername", os.Getenv("DATABASE_USER"))
 		options.SetDefault("DatabasePassword", os.Getenv("DATABASE_PASSWORD"))
 		options.SetDefault("DatabaseName", os.Getenv("DATABASE_NAME"))
-
+		options.SetDefault("KafkaTopic", "platform.catalog.persister")
 	}
 
-	options.SetDefault("KafkaTopic", "platform.catalog.persister")
 	options.SetDefault("KafkaGroupID", "tower_persister")
 	options.SetDefault("LogLevel", "INFO")
 	options.SetDefault("OpenshiftBuildCommit", "notrunninginopenshift")

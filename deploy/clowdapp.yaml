@@ -7,17 +7,17 @@ objects:
 - apiVersion: cloud.redhat.com/v1alpha1
   kind: ClowdApp
   metadata:
-    name: catalog-tower-persister
+    name: catalog-tower
   spec:
     envName: ${ENV_NAME}
     pods:
-    - name: service
+    - name: persister
       image: ${IMAGE}:${IMAGE_TAG}
       minReplicas: ${{MIN_REPLICAS}}
       livenessProbe:
         failureThreshold: 3
         httpGet:
-          path: /expvar
+          path: /debug/vars
           port: 8000
           scheme: HTTP
         initialDelaySeconds: 35
@@ -27,7 +27,7 @@ objects:
       readinessProbe:
         failureThreshold: 3
         httpGet:
-          path: /
+          path: /debug/vars
           port: 8000
           scheme: HTTP
         initialDelaySeconds: 35
@@ -35,16 +35,6 @@ objects:
         successThreshold: 1
         timeoutSeconds: 120
       env:
-      - name: DATABASE_HOST
-        value: ${DATABASE_HOST}
-      - name: DATABASE_PORT
-        value: ${DATABASE_PORT}
-      - name: DATABASE_USER
-        value: ${DATABASE_USER}
-      - name: DATABASE_PASSWORD
-        value: ${DATABASE_PASSWORD}
-      - name: DATABASE_NAME
-        value: ${DATABASE_NAME}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
       - name: CLOWDER_ENABLED
@@ -64,12 +54,14 @@ objects:
       - mountPath: /tmp
         name: tmpdir
     kafkaTopics:
-    - replicas: 3
-      partitions: 64
-      topicName: platform.catalog.persister
+    - topicName: platform.catalog.persister
+    database:
+      name: catalog_inventory_production
+      sharedDbAppName: catalog-inventory
+    dependencies:
+    - catalog-inventory
+
 parameters:
-- name: DATABASE_NAME
-  value: catalog-inventory-api
 - name: LOG_LEVEL
   value: INFO
 - description: Cpu limit of service
@@ -91,4 +83,4 @@ parameters:
   value: "True"
 - description: ClowdEnv Name
   name: ENV_NAME
-  requred: false
+  required: false

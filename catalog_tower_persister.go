@@ -26,8 +26,8 @@ func main() {
 	cfg := config.Get()
 	log := logger.InitLogger()
 	log.Info("Starting Catalog Tower Persister")
-	httpServer := fmt.Sprintf("::%d", cfg.WebPort)
-	go http.ListenAndServe(httpServer, http.DefaultServeMux)
+	httpServer := fmt.Sprintf(":%d", cfg.WebPort)
+	go http.ListenAndServe(httpServer, nil)
 	defer log.Info("Finished Catalog Worker")
 
 	expvar.Publish("goroutines", expvar.Func(func() interface{} {
