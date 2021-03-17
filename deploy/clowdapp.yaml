@@ -7,17 +7,17 @@ objects:
 - apiVersion: cloud.redhat.com/v1alpha1
   kind: ClowdApp
   metadata:
-    name: catalog-tower
+    name: catalog-tower-persister
   spec:
     envName: ${ENV_NAME}
     pods:
-    - name: persister
+    - name: service
       image: ${IMAGE}:${IMAGE_TAG}
       minReplicas: ${{MIN_REPLICAS}}
       livenessProbe:
         failureThreshold: 3
         httpGet:
-          path: /debug/vars
+          path: /health
           port: 8000
           scheme: HTTP
         initialDelaySeconds: 35
@@ -27,7 +27,7 @@ objects:
       readinessProbe:
         failureThreshold: 3
         httpGet:
-          path: /debug/vars
+          path: /ready
           port: 8000
           scheme: HTTP
         initialDelaySeconds: 35

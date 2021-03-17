@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"encoding/json"
 
@@ -25,7 +26,7 @@ type MessagePayload struct {
 	Size     int64  `json:"size"`
 }
 
-func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdown chan struct{}, wg *sync.WaitGroup) {
+func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdown chan struct{}, wg *sync.WaitGroup, isReady *atomic.Value) {
 	cfg := config.Get()
 	defer logger.Info("Kafka Listener exiting")
 	defer wg.Done()
@@ -57,6 +58,7 @@ func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdo
 		if err := c.Subscribe(cfg.KafkaTopic, nil); err != nil {
 			logger.Errorf("Error subscribing to topic %v", err)
 		} else {
+			isReady.Store(true)
 			handleMessages(ctx, c, dbContext, logger, shutdown, wg)
 		}
 	}
