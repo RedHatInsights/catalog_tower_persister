@@ -33,6 +33,7 @@ func (bol *BillOfLading) ProcessPage(ctx context.Context, url string, r io.Reade
 		bol.logger.Errorf("%v", err)
 		return err
 	}
+	fmt.Println("Debugging - Start Processing Page")
 	// Survey Spec have a different format and are never returned as a list
 	// They don't have ID's so we need to handle them separately, also we dont
 	// want to read the file twice,
@@ -170,6 +171,7 @@ func (bol *BillOfLading) addObject(ctx context.Context, obj map[string]interface
 	}
 
 	bol.logger.Infof("Object Type %s Source Ref %s", obj["type"].(string), obj["id"].(json.Number).String())
+	fmt.Printf("Debugging Object Type %s Source Ref %s\n", obj["type"].(string), obj["id"].(json.Number).String())
 	srcRef := obj["id"].(json.Number).String()
 	switch objType := obj["type"].(string); objType {
 	case "job_template", "workflow_job_template":

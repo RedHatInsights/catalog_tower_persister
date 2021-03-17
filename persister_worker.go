@@ -46,8 +46,11 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	}
 	pc.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
 	pc.dbTransaction = db.DB.Begin()
+	fmt.Println("Creating Payload")
 	pc.bol = payload.MakeBillOfLading(pc.logger, pc.tenant, pc.source, nil, pc.dbTransaction)
+	fmt.Println("Starting to Process Tar file")
 	err = pc.bol.ProcessTar(newCtx, message.DataURL, shutdown)
+	fmt.Println("Back from Tar file processing")
 	if err != nil {
 		pc.logger.Errorf("Rolling back database changes %v", err)
 		pc.dbTransaction.Rollback()
