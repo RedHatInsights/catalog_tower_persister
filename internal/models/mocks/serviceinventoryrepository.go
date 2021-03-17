@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//MockServiceInventoryRepository used for testing
 type MockServiceInventoryRepository struct {
 	DeletesCalled int
 	AddsCalled    int
@@ -15,6 +16,7 @@ type MockServiceInventoryRepository struct {
 	DeleteError   error
 }
 
+//DeleteUnwanted objects given a list of objects to keep
 func (msir *MockServiceInventoryRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, si *serviceinventory.ServiceInventory, keepSourceRefs []string) error {
 	if msir.DeleteError == nil {
 		msir.DeletesCalled++
@@ -22,6 +24,7 @@ func (msir *MockServiceInventoryRepository) DeleteUnwanted(ctx context.Context, 
 	return msir.DeleteError
 }
 
+//CreateOrUpdate an object
 func (msir *MockServiceInventoryRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, si *serviceinventory.ServiceInventory, attrs map[string]interface{}) error {
 	if msir.AddError == nil {
 		msir.AddsCalled++
@@ -29,6 +32,7 @@ func (msir *MockServiceInventoryRepository) CreateOrUpdate(ctx context.Context, 
 	return msir.AddError
 }
 
+//Stats get the number of adds/updates/deletes
 func (msir *MockServiceInventoryRepository) Stats() map[string]int {
 	return map[string]int{"adds": msir.AddsCalled, "deletes": msir.DeletesCalled, "updates": msir.UpdatesCalled}
 }

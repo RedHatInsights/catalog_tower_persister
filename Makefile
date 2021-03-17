@@ -1,8 +1,5 @@
 SRC_FILES= catalog_tower_persister.go\
 	   persister_worker.go \
-	   process_deletes.go \
-	   link_handler.go \
-	   page_handler.go \
 	   kafka_listener.go
 
           
@@ -44,4 +41,4 @@ clean:
 	go clean
 
 lint:
-	golint ${SRC_FILES} ${TEST_FILES}
+	golint ./...
