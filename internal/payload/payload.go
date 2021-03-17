@@ -63,10 +63,11 @@ type BillOfLading struct {
 // MakeBillOfLading creates a BillOfLading
 func MakeBillOfLading(logger *logrus.Entry, tenant *tenant.Tenant, source *source.Source, repos *ObjectRepos, dbTransaction *gorm.DB) *BillOfLading {
 	bol := BillOfLading{
-		tenant: tenant,
-		source: source,
-		repos:  repos,
-		logger: logger}
+		tenant:        tenant,
+		source:        source,
+		repos:         repos,
+		dbTransaction: dbTransaction,
+		logger:        logger}
 	if bol.repos == nil {
 		bol.repos = defaultObjectRepos(dbTransaction)
 	}
