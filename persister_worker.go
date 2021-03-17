@@ -1,11 +1,8 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -13,6 +10,7 @@ import (
 	"github.com/RedHatInsights/catalog_tower_persister/internal/catalogtask"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/source"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/tenant"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/payload"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -23,7 +21,7 @@ type persisterContext struct {
 	dbTransaction    *gorm.DB
 	shutdownReceived bool
 	timeToWait       time.Duration
-	pageContext      *PageContext
+	bol              *payload.BillOfLading
 	logger           *logrus.Entry
 	catalogTask      catalogtask.CatalogTask
 }
@@ -48,8 +46,8 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	}
 	pc.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
 	pc.dbTransaction = db.DB.Begin()
-	pc.pageContext = MakePageContext(pc.logger, pc.tenant, pc.source, defaultObjectRepos(pc.dbTransaction))
-	err = pc.process(newCtx, message.DataURL, shutdown)
+	pc.bol = payload.MakeBillOfLading(pc.logger, pc.tenant, pc.source, nil, pc.dbTransaction)
+	err = pc.bol.ProcessTar(newCtx, message.DataURL, shutdown)
 	if err != nil {
 		pc.logger.Errorf("Rolling back database changes %v", err)
 		pc.dbTransaction.Rollback()
@@ -57,8 +55,7 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	} else {
 		pc.dbTransaction.Commit()
 		pc.logger.Info("Commited database changes")
-		pc.updateTask("completed", "ok", "Success", pc.pageContext.GetStats(newCtx))
-		pc.pageContext.LogReports(newCtx)
+		pc.updateTask("completed", "ok", "Success", pc.bol.GetStats(newCtx))
 	}
 }
 
@@ -76,68 +73,6 @@ func (pc *persisterContext) setup(db DatabaseContext, tenantID int64, sourceID i
 		return err
 	}
 
-	return nil
-}
-
-func (pc *persisterContext) process(ctx context.Context, url string, shutdown chan struct{}) error {
-
-	pc.logger.Infof("Fetching URL %s", url)
-
-	resp, err := http.Get(url)
-	if err != nil {
-		pc.logger.Errorf("Error getting URL %s %v", url, err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	zr, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		pc.logger.Errorf("Error opening gzip %v", err)
-		return err
-	}
-	defer zr.Close()
-	tr := tar.NewReader(zr)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			pc.logger.Errorf("Error reading tar header %v", err)
-			return err
-		}
-		switch hdr.Typeflag {
-		case tar.TypeReg:
-			pc.logger.Infof("Contents of %s", hdr.Name)
-			err = pc.pageContext.Process(ctx, hdr.Name, tr)
-			if err != nil {
-				pc.logger.Errorf("Error handling file %s %v", hdr.Name, err)
-				return err
-			}
-		}
-
-	}
-	err = pc.postProcess(ctx)
-	if err != nil {
-		pc.logger.Errorf("Error post processing data %v", err)
-		return err
-	}
-	return nil
-
-}
-
-func (pc *persisterContext) postProcess(ctx context.Context) error {
-	lh := LinkHandler{pageContext: pc.pageContext, dbTransaction: pc.dbTransaction}
-	err := lh.Process()
-	if err != nil {
-		pc.logger.Errorf("Error in linking objects %v", err)
-		return err
-	}
-	err = pc.pageContext.ProcessDeletes(ctx)
-	if err != nil {
-		pc.logger.Errorf("Error in deleting objects %v", err)
-		return err
-	}
 	return nil
 }
 

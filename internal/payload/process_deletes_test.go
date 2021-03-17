@@ -1,4 +1,4 @@
-package main
+package payload
 
 import (
 	"context"
@@ -25,10 +25,10 @@ func TestDeletes(t *testing.T) {
 	for _, tt := range deleteSpecTests {
 		ctx := context.TODO()
 		repos := dummyObjectRepos(nil, nil)
-		pc := MakePageContext(testhelper.TestLogger(), &testTenant, &testSource, repos)
-		err := pc.Process(ctx, tt.url, strings.NewReader(tt.data))
+		bol := MakeBillOfLading(testhelper.TestLogger(), &testTenant, &testSource, repos, nil)
+		err := bol.ProcessPage(ctx, tt.url, strings.NewReader(tt.data))
 		assert.Nil(t, err, tt.url)
-		err = pc.ProcessDeletes(ctx)
+		err = bol.ProcessDeletes(ctx)
 		assert.Nil(t, err, tt.url)
 	}
 }
@@ -38,10 +38,10 @@ func TestDeleteErrors(t *testing.T) {
 	for _, tt := range deleteSpecTests {
 		ctx := context.TODO()
 		repos := dummyObjectRepos(nil, kaboom)
-		pc := MakePageContext(testhelper.TestLogger(), &testTenant, &testSource, repos)
-		err := pc.Process(ctx, tt.url, strings.NewReader(tt.data))
+		bol := MakeBillOfLading(testhelper.TestLogger(), &testTenant, &testSource, repos, nil)
+		err := bol.ProcessPage(ctx, tt.url, strings.NewReader(tt.data))
 		assert.Nil(t, err, tt.url)
-		err = pc.ProcessDeletes(ctx)
+		err = bol.ProcessDeletes(ctx)
 		assert.NotNil(t, err, tt.url)
 		if !strings.Contains(err.Error(), "Kaboom") {
 			t.Fatalf("Error message should have contained kaboom")

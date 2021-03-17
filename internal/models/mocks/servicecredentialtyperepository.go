@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//MockServiceCredentialTypeRepository used for tests
 type MockServiceCredentialTypeRepository struct {
 	DeletesCalled int
 	AddsCalled    int
@@ -15,6 +16,7 @@ type MockServiceCredentialTypeRepository struct {
 	DeleteError   error
 }
 
+//DeleteUnwanted objects given a list of objects to keep
 func (msctr *MockServiceCredentialTypeRepository) DeleteUnwanted(ctx context.Context, logger *logrus.Entry, sct *servicecredentialtype.ServiceCredentialType, keepSourceRefs []string) error {
 	if msctr.DeleteError == nil {
 		msctr.DeletesCalled++
@@ -22,6 +24,7 @@ func (msctr *MockServiceCredentialTypeRepository) DeleteUnwanted(ctx context.Con
 	return msctr.DeleteError
 }
 
+//CreateOrUpdate an object
 func (msctr *MockServiceCredentialTypeRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sct *servicecredentialtype.ServiceCredentialType, attrs map[string]interface{}) error {
 	if msctr.AddError == nil {
 		msctr.AddsCalled++
@@ -29,6 +32,7 @@ func (msctr *MockServiceCredentialTypeRepository) CreateOrUpdate(ctx context.Con
 	return msctr.AddError
 }
 
+//Stats get the count for adds/updates/deletes
 func (msctr *MockServiceCredentialTypeRepository) Stats() map[string]int {
 	return map[string]int{"adds": msctr.AddsCalled, "deletes": msctr.DeletesCalled, "updates": msctr.UpdatesCalled}
 }
