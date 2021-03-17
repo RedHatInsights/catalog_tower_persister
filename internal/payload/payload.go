@@ -80,7 +80,6 @@ func MakeBillOfLading(logger *logrus.Entry, tenant *tenant.Tenant, source *sourc
 // from the compressed tar.
 func (bol *BillOfLading) ProcessTar(ctx context.Context, url string, shutdown chan struct{}) error {
 
-	fmt.Printf("Debugging - Fetching URL %s\n", url)
 	bol.logger.Infof("Fetching URL %s", url)
 
 	resp, err := http.Get(url)
@@ -109,9 +108,7 @@ func (bol *BillOfLading) ProcessTar(ctx context.Context, url string, shutdown ch
 		switch hdr.Typeflag {
 		case tar.TypeReg:
 			bol.logger.Infof("Contents of %s", hdr.Name)
-			fmt.Printf("Debugging Processing - File %s\n", hdr.Name)
 			err = bol.ProcessPage(ctx, hdr.Name, tr)
-			fmt.Printf("Debugging Done Processing - File %s\n", hdr.Name)
 			if err != nil {
 				bol.logger.Errorf("Error handling file %s %v", hdr.Name, err)
 				return err
@@ -120,13 +117,11 @@ func (bol *BillOfLading) ProcessTar(ctx context.Context, url string, shutdown ch
 
 	}
 
-	fmt.Println("Debugging Post Processing")
 	err = bol.postProcess(ctx)
 	if err != nil {
 		bol.logger.Errorf("Error post processing data %v", err)
 		return err
 	}
-	fmt.Println("Debugging Log Reports")
 	bol.logReports(ctx)
 	return nil
 }
