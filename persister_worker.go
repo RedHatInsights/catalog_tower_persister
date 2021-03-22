@@ -20,7 +20,6 @@ type persisterContext struct {
 	tenant           *tenant.Tenant
 	dbTransaction    *gorm.DB
 	shutdownReceived bool
-	timeToWait       time.Duration
 	bol              *payload.BillOfLading
 	logger           *logrus.Entry
 	catalogTask      catalogtask.CatalogTask
@@ -35,7 +34,6 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	defer cancel()
 
 	pc := persisterContext{logger: logger}
-	pc.timeToWait = 5 * time.Minute // Wait five minutes for a response
 	pc.catalogTask = catalogtask.MakeCatalogTask(ctx, pc.logger, message.TaskURL, headers)
 
 	err := pc.setup(db, message.TenantID, message.SourceID)
@@ -47,7 +45,7 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	pc.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
 	pc.dbTransaction = db.DB.Begin()
 	pc.bol = payload.MakeBillOfLading(pc.logger, pc.tenant, pc.source, nil, pc.dbTransaction)
-	err = pc.bol.ProcessTar(newCtx, message.DataURL, shutdown)
+	err = payload.ProcessTar(newCtx, pc.logger, pc.bol, &http.Client{}, pc.dbTransaction, message.DataURL, shutdown)
 	if err != nil {
 		pc.logger.Errorf("Rolling back database changes %v", err)
 		pc.dbTransaction.Rollback()
