@@ -15,17 +15,20 @@ import (
 	"gorm.io/gorm"
 )
 
-type persisterContext struct {
-	source           *source.Source
-	tenant           *tenant.Tenant
-	dbTransaction    *gorm.DB
-	shutdownReceived bool
-	bol              *payload.BillOfLading
-	logger           *logrus.Entry
-	catalogTask      catalogtask.CatalogTask
+type defaultPersister struct {
+	catalogTask catalogtask.CatalogTask
 }
 
-func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logrus.Entry, message MessagePayload, headers map[string]string, shutdown chan struct{}, wg *sync.WaitGroup) {
+// Persister Interface needs to be able to process a Tar file and
+// also update the Task in the cloud.redhat.com
+type Persister interface {
+	ProcessTar(ctx context.Context, logger *logrus.Entry, loader payload.Loader, client *http.Client, dbTransaction *gorm.DB, url string, shutdown chan struct{}) error
+	TaskUpdater(logger *logrus.Entry, d map[string]interface{}, client *http.Client) error
+}
+
+// startPersisterWorker when a message is received from Kafka we start a
+// Persister Worker.
+func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logrus.Entry, message MessagePayload, headers map[string]string, shutdown chan struct{}, wg *sync.WaitGroup, p Persister) {
 	defer logger.Info("Persister Worker finished")
 	defer wg.Done()
 	logger.Info("Persister Worker started")
@@ -33,48 +36,53 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	newCtx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
-	pc := persisterContext{logger: logger}
-	pc.catalogTask = catalogtask.MakeCatalogTask(ctx, pc.logger, message.TaskURL, headers)
+	if p == nil {
+		p = &defaultPersister{catalogTask: catalogtask.MakeCatalogTask(ctx, logger, message.TaskURL, headers)}
+	}
 
-	err := pc.setup(db, message.TenantID, message.SourceID)
+	tenant, source, err := setup(logger, db, message.TenantID, message.SourceID)
 	if err != nil {
-		pc.updateTask("completed", "error", err.Error(), nil)
-		pc.logger.Errorf("Error setting up tenant and source %v", err)
+		updateTask(logger, "completed", "error", err.Error(), nil, p)
+		logger.Errorf("Error setting up tenant and source %v", err)
 		return
 	}
-	pc.updateTask("running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil)
-	pc.dbTransaction = db.DB.Begin()
-	pc.bol = payload.MakeBillOfLading(pc.logger, pc.tenant, pc.source, nil, pc.dbTransaction)
-	err = payload.ProcessTar(newCtx, pc.logger, pc.bol, &http.Client{}, pc.dbTransaction, message.DataURL, shutdown)
+
+	updateTask(logger, "running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil, p)
+	dbTransaction := db.DB.Begin()
+	bol := payload.MakeBillOfLading(logger, tenant, source, nil, dbTransaction)
+	err = p.ProcessTar(newCtx, logger, bol, &http.Client{}, dbTransaction, message.DataURL, shutdown)
 	if err != nil {
-		pc.logger.Errorf("Rolling back database changes %v", err)
-		pc.dbTransaction.Rollback()
-		pc.updateTask("completed", "error", err.Error(), nil)
+		logger.Errorf("Rolling back database changes %v", err)
+		dbTransaction.Rollback()
+		updateTask(logger, "completed", "error", err.Error(), nil, p)
 	} else {
-		pc.dbTransaction.Commit()
-		pc.logger.Info("Commited database changes")
-		pc.updateTask("completed", "ok", "Success", pc.bol.GetStats(newCtx))
+		dbTransaction.Commit()
+		logger.Info("Commited database changes")
+		updateTask(logger, "completed", "ok", "Success", bol.GetStats(newCtx), p)
 	}
 }
 
-func (pc *persisterContext) setup(db DatabaseContext, tenantID int64, sourceID int64) error {
+// setup ensures we have a Tenant and Source object
+func setup(logger *logrus.Entry, db DatabaseContext, tenantID int64, sourceID int64) (*tenant.Tenant, *source.Source, error) {
 	var err error
-	pc.tenant, err = pc.findTenant(db, tenantID)
+	tenant, err := findTenant(db, tenantID)
 	if err != nil {
-		pc.logger.Errorf("Could not find tenant %v", err)
-		return err
+		logger.Errorf("Could not find tenant %v", err)
+		return nil, nil, err
 	}
 
-	pc.source, err = pc.findSource(db, sourceID)
+	source, err := findSource(db, sourceID)
 	if err != nil {
-		pc.logger.Errorf("Could not find source %v", err)
-		return err
+		logger.Errorf("Could not find source %v", err)
+		return nil, nil, err
 	}
 
-	return nil
+	return tenant, source, nil
 }
 
-func (pc *persisterContext) findTenant(db DatabaseContext, tenantID int64) (*tenant.Tenant, error) {
+// findTenant finds a Tenant object from the Database. We get the TenantID from
+// the Catalog Inventory API in the Kafka Message Payload
+func findTenant(db DatabaseContext, tenantID int64) (*tenant.Tenant, error) {
 	tenant := tenant.Tenant{}
 	err := db.DB.First(&tenant, tenantID).Error
 	if err != nil {
@@ -83,17 +91,20 @@ func (pc *persisterContext) findTenant(db DatabaseContext, tenantID int64) (*ten
 	return &tenant, nil
 }
 
-func (pc *persisterContext) findSource(db DatabaseContext, sourceID int64) (*source.Source, error) {
+// findSource finds a Source object from the Database. We get the SourceID from
+// the Catalog Inventory API in the Kafka Message Payload
+func findSource(db DatabaseContext, sourceID int64) (*source.Source, error) {
 	source := source.Source{}
 	err := db.DB.First(&source, sourceID).Error
 	if err != nil {
 		return nil, fmt.Errorf("Error finding source: %v", err)
 	}
-
 	return &source, nil
 }
 
-func (pc *persisterContext) updateTask(state, status, msg string, stats map[string]interface{}) error {
+// updateTask updates the Task Object in the Catalog Inventory API by making
+// a REST API call.
+func updateTask(logger *logrus.Entry, state, status, msg string, stats map[string]interface{}, p Persister) error {
 	data := map[string]interface{}{"status": status, "state": state, "message": msg}
 	if stats != nil {
 		data["output"] = map[string]interface{}{"stats": stats}
@@ -102,10 +113,21 @@ func (pc *persisterContext) updateTask(state, status, msg string, stats map[stri
 	if status == "error" {
 		data["output"] = map[string]interface{}{"errors": []string{msg}}
 	}
-	err := pc.catalogTask.Update(data, &http.Client{})
+	return p.TaskUpdater(logger, data, &http.Client{})
+}
+
+// TaskUpdater updates the Task object via REST API
+func (dp *defaultPersister) TaskUpdater(logger *logrus.Entry, data map[string]interface{}, client *http.Client) error {
+	err := dp.catalogTask.Update(data, client)
 	if err != nil {
-		pc.logger.Errorf("Error updating catalog task %v", err)
+		logger.Errorf("Error updating catalog task %v", err)
 		return err
 	}
 	return nil
+}
+
+// ProcessTar handles a Tar Payload and creates objects in the DB based on the
+// files bundled in the compressed tar.
+func (dp *defaultPersister) ProcessTar(ctx context.Context, logger *logrus.Entry, loader payload.Loader, client *http.Client, dbTransaction *gorm.DB, url string, shutdown chan struct{}) error {
+	return payload.ProcessTar(ctx, logger, loader, client, dbTransaction, url, shutdown)
 }

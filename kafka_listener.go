@@ -88,7 +88,7 @@ func processMessage(ctx context.Context, dbContext DatabaseContext, logger *logr
 		logEntry.Info(stats())
 		wg.Add(1)
 		ctx := context.Background()
-		go startPersisterWorker(ctx, dbContext, logEntry, messagePayload, messageHeaders, shutdown, wg)
+		go startPersisterWorker(ctx, dbContext, logEntry, messagePayload, messageHeaders, shutdown, wg, nil)
 	}
 }
 
