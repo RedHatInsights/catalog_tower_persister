@@ -2,7 +2,7 @@
 
 Catalog Tower Persister adds/updates/removes Ansible Tower objects in the Catalog Inventory
 database. It gets information about these objects in a compressed tar file from the Upload Service.
-Once the Catalog MQTT Client uploads the file, the Upload Service sends a message on the kafka
+Once the Catalog Worker uploads the file, the Ingress Service sends a message on the kafka
 topic **platform.upload.catalog** with the payload details and a URL to download the file.
 
 Kafka Payload info
@@ -18,7 +18,7 @@ Kafka Payload info
     },
     "b64_identity": "xxxxxxxx",
     "timestamp": "2020-11-25T16:22:56.449719273Z",
-    "category": "catalog",
+    "category": "<<refresh_task_id>>",
     "account": "xxxx",
     "principal": "xxxx"
 }
@@ -57,4 +57,4 @@ api/v2/workflow_job_template_nodes/page1.json
 api/v2/workflow_job_template_nodes/page2.json
 ```
 
-![Alt Upload](image.png?raw=true)
+![Alt UsingUploadService](./docs/ctp.png?raw=true)

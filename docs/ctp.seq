@@ -1,0 +1,32 @@
+title Catalog Tower Persister
+
+
+participantgroup #pink **on prem**
+
+participant Ansible Tower
+participant Catalog Worker #orange
+participant Red Hat Connect
+end
+
+participantgroup #lightgreen **cloud.redhat.com **
+participant Cloud Connector
+participant Ingress
+participant Amazon S3 Bucket
+participant Kafka(Ingress)
+participant Catalog Inventory API#orange
+participant Kafka(Persister)
+participant Catalog Tower Persister#orange
+database #blue:1 Database #red
+end
+
+Cloud Connector->Red Hat Connect: Inventory Refresh
+Red Hat Connect->Catalog Worker: Work
+Catalog Worker->Ansible Tower: Make REST API\n Calls
+Catalog Worker->Ingress: Upload Tar File
+Ingress->Amazon S3 Bucket: Save Tar File
+Ingress->Kafka(Ingress): Payload ready
+Catalog Inventory API->Kafka(Ingress): Read Payload Info
+Catalog Inventory API->Kafka(Persister): Message Persister
+Catalog Tower Persister->Kafka(Persister): Get Payload Info
+Catalog Tower Persister->Amazon S3 Bucket:Get Payload
+Catalog Tower Persister->Database:Commit Data
