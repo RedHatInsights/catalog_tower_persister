@@ -1,3 +1,4 @@
+// Paste this in sequencediagram.org to see a rendering
 title Catalog Tower Persister
 
 
@@ -19,14 +20,17 @@ participant Catalog Tower Persister#orange
 database #blue:1 Database #red
 end
 
-Cloud Connector->Red Hat Connect: Inventory Refresh
+Catalog Inventory API->Cloud Connector:Send Inventory Refresh Task URL
+Cloud Connector->Red Hat Connect: MQTT Message
 Red Hat Connect->Catalog Worker: Work
+Catalog Worker->Catalog Inventory API:Get Refresh Task Details
 Catalog Worker->Ansible Tower: Make REST API\n Calls
 Catalog Worker->Ingress: Upload Tar File
+Catalog Worker->Catalog Inventory API: Update Task Status
 Ingress->Amazon S3 Bucket: Save Tar File
 Ingress->Kafka(Ingress): Payload ready
 Catalog Inventory API->Kafka(Ingress): Read Payload Info
-Catalog Inventory API->Kafka(Persister): Message Persister
+Catalog Inventory API->Kafka(Persister): Send Payload Info
 Catalog Tower Persister->Kafka(Persister): Get Payload Info
 Catalog Tower Persister->Amazon S3 Bucket:Get Payload
 Catalog Tower Persister->Database:Commit Data
