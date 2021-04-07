@@ -2,7 +2,9 @@ package base
 
 import (
 	"database/sql"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -26,14 +28,17 @@ type Base struct {
 type Tower struct {
 	SourceRef       string
 	SourceCreatedAt time.Time
-	// SourceUpdatedAt  time.Time
+	SourceUpdatedAt time.Time
 	// SourceDeletedAt  sql.NullTime
 	LastSeenAt sql.NullTime
 }
 
 //TowerTime converts datetime from Tower to UTC
 func TowerTime(str string) (time.Time, error) {
-	t, err := time.Parse(time.RFC3339, str)
+	//"2020-01-08T10:22:59.423585Z"
+	// Drop the subseconds
+	s := fmt.Sprintf("%sZ", strings.Split(str, ".")[0])
+	t, err := time.Parse(time.RFC3339, s)
 	return t, err
 }
 

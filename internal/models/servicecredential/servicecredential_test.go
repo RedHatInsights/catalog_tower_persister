@@ -10,16 +10,17 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
 	"github.com/stretchr/testify/assert"
 	"gorm.io/gorm"
 )
 
 var objectType = "credential"
-
+var modifiedDateTime = "2020-01-08T10:22:59.423585Z"
 var defaultAttrs = map[string]interface{}{
 	"created":         "2020-01-08T10:22:59.423567Z",
-	"modified":        "2020-01-08T10:22:59.423585Z",
+	"modified":        modifiedDateTime,
 	"id":              json.Number("4"),
 	"name":            "demo",
 	"description":     "openshift",
@@ -28,7 +29,7 @@ var defaultAttrs = map[string]interface{}{
 }
 
 var columns = []string{"id", "tenant_id", "source_id", "source_ref", "name", "type_name",
-	"description", "source_created_at", "created_at", "updated_at",
+	"description", "source_created_at", "source_updated_at", "created_at", "updated_at",
 	"service_credential_type_id"}
 var tenantID = int64(99)
 var sourceID = int64(1)
@@ -104,7 +105,7 @@ func TestCreateError(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_credentials"`)).
-		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), "demo", sqlmock.AnyArg(), "openshift", tenantID, 1).
+		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, testhelper.AnyTime{}, testhelper.AnyTime{}, sqlmock.AnyArg(), "demo", sqlmock.AnyArg(), "openshift", tenantID, 1).
 		WillReturnError(fmt.Errorf("kaboom"))
 
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
@@ -127,7 +128,7 @@ func TestCreate(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_credentials"`)).
-		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), "demo", sqlmock.AnyArg(), "openshift", tenantID, 1).
+		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, testhelper.AnyTime{}, testhelper.AnyTime{}, sqlmock.AnyArg(), "demo", sqlmock.AnyArg(), "openshift", tenantID, 1).
 		WillReturnRows(sqlmock.NewRows([]string{"service_credential_type_id", "id"}).AddRow(5, newID))
 	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
 	assert.Nil(t, err, "CreateOrUpdate failed")
@@ -150,7 +151,7 @@ func TestCreateOrUpdateError(t *testing.T) {
 	srcRef := "4"
 	id := int64(1)
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), nil)
 	ctx := context.TODO()
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
@@ -171,7 +172,7 @@ func TestCreateOrUpdate(t *testing.T) {
 	id := int64(1)
 	srcRef := "4"
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), nil)
 	ctx := context.TODO()
 	scr := NewGORMRepository(gdb)
 	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
@@ -191,6 +192,31 @@ func TestCreateOrUpdate(t *testing.T) {
 
 }
 
+func TestNoChange(t *testing.T) {
+	gdb, mock, teardown := testhelper.MockDBSetup(t)
+	defer teardown()
+	id := int64(1)
+	srcRef := "4"
+	mt, _ := base.TowerTime(modifiedDateTime)
+	rows := sqlmock.NewRows(columns).
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), mt, time.Now(), time.Now(), nil)
+	ctx := context.TODO()
+	scr := NewGORMRepository(gdb)
+	sc := ServiceCredential{SourceID: sourceID, TenantID: tenantID}
+	str := `SELECT * FROM "service_credentials" WHERE "service_credentials"."source_ref" = $1 AND "service_credentials"."source_id" = $2 AND "service_credentials"."archived_at" IS NULL ORDER BY "service_credentials"."id" LIMIT 1`
+	mock.ExpectQuery(regexp.QuoteMeta(str)).
+		WithArgs(srcRef, sourceID).
+		WillReturnRows(rows)
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sc, defaultAttrs)
+
+	assert.Nil(t, err, "CreateOrUpdate failed")
+	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
+	stats := scr.Stats()
+	assert.Equal(t, stats["adds"], 0)
+	assert.Equal(t, stats["updates"], 0)
+	assert.Equal(t, stats["deletes"], 0)
+}
+
 func TestDeleteUnwantedMissing(t *testing.T) {
 	gdb, mock, teardown := testhelper.MockDBSetup(t)
 	defer teardown()
@@ -198,7 +224,7 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 	sourceRef := "2"
 
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
+		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), nil)
 
 	ctx := context.TODO()
 	scr := NewGORMRepository(gdb)
@@ -225,7 +251,7 @@ func TestDeleteUnwanted(t *testing.T) {
 	sourceRef := "2"
 
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
+		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), nil)
 
 	ctx := context.TODO()
 	scr := NewGORMRepository(gdb)
@@ -276,7 +302,7 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 	sourceRef := "2"
 
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), nil)
+		AddRow(id, tenantID, sourceID, sourceRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), nil)
 
 	ctx := context.TODO()
 	scr := NewGORMRepository(gdb)

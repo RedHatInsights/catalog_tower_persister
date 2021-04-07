@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceplan"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/testhelper"
 	"github.com/sirupsen/logrus"
@@ -52,10 +53,11 @@ func (mspr *MockServicePlanRepository) Stats() map[string]int {
 }
 
 var objectType = "job_template"
+var modifiedDateTime = "2020-01-08T10:22:59.423585Z"
 
 func makeDefaultAttrs(id string, survey bool) map[string]interface{} {
 	return map[string]interface{}{"created": "2020-01-08T10:22:59.423567Z",
-		"modified":                "2020-01-08T10:22:59.423585Z",
+		"modified":                modifiedDateTime,
 		"id":                      json.Number(id),
 		"inventory":               "/api/v2/inventories/1/",
 		"name":                    "demo",
@@ -69,7 +71,7 @@ func makeDefaultAttrs(id string, survey bool) map[string]interface{} {
 }
 
 var columns = []string{"id", "tenant_id", "source_id", "source_ref", "name", "type_name",
-	"description", "source_created_at", "created_at", "updated_at",
+	"description", "source_created_at", "source_updated_at", "created_at", "updated_at",
 	"extra"}
 var tenantID = int64(99)
 var sourceID = int64(1)
@@ -148,7 +150,7 @@ func TestCreateError(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_offerings"`)).
-		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
+		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, testhelper.AnyTime{}, testhelper.AnyTime{}, sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
 		WillReturnError(fmt.Errorf("kaboom"))
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
 	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, makeDefaultAttrs(srcRef, true), &MockServicePlanRepository{})
@@ -171,7 +173,7 @@ func TestCreate(t *testing.T) {
 		WithArgs(srcRef, sourceID).
 		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_offerings"`)).
-		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, sqlmock.AnyArg(), sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
+		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, testhelper.AnyTime{}, testhelper.AnyTime{}, sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
 		WillReturnRows(sqlmock.NewRows([]string{"service_offering_icon_id", "id", "service_inventory_id"}).AddRow(5, newID, 6))
 	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
 	assert.Nil(t, err, "CreateOrUpdate failed")
@@ -196,7 +198,7 @@ func TestCreateOrUpdateExtraError(t *testing.T) {
 	id := int64(1)
 	defaultAttrs := makeDefaultAttrs(srcRef, true)
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -226,7 +228,7 @@ func TestCreateOrUpdateError(t *testing.T) {
 	id := int64(1)
 	defaultAttrs := makeDefaultAttrs(srcRef, true)
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -259,7 +261,7 @@ func TestCreateOrUpdate(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -277,6 +279,43 @@ func TestCreateOrUpdate(t *testing.T) {
 	assert.Equal(t, stats["updates"], 1)
 	assert.Equal(t, stats["deletes"], 0)
 
+}
+
+func TestNoChange(t *testing.T) {
+	gdb, mock, teardown := testhelper.MockDBSetup(t)
+	defer teardown()
+	id := int64(1)
+	srcRef := "4"
+
+	defaultAttrs := makeDefaultAttrs(srcRef, false)
+	extra := map[string]interface{}{
+		"ask_inventory_on_launch": true,
+		"ask_variables_on_launch": false,
+		"survey_enabled":          true,
+		"type":                    "job_template"}
+
+	encodedExtra, err := json.Marshal(extra)
+	if err != nil {
+		t.Fatalf("Error encoding extra data")
+	}
+	mt, _ := base.TowerTime(modifiedDateTime)
+	rows := sqlmock.NewRows(columns).
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), mt, time.Now(), time.Now(), encodedExtra)
+	ctx := context.TODO()
+	sor := NewGORMRepository(gdb)
+	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
+	str := `SELECT * FROM "service_offerings" WHERE "service_offerings"."source_ref" = $1 AND "service_offerings"."source_id" = $2 AND "service_offerings"."archived_at" IS NULL ORDER BY "service_offerings"."id" LIMIT 1`
+	mock.ExpectQuery(regexp.QuoteMeta(str)).
+		WithArgs(srcRef, sourceID).
+		WillReturnRows(rows)
+	err = sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
+
+	assert.Nil(t, err, "CreateOrUpdate failed")
+	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
+	stats := sor.Stats()
+	assert.Equal(t, stats["adds"], 0)
+	assert.Equal(t, stats["updates"], 0)
+	assert.Equal(t, stats["deletes"], 0)
 }
 
 func TestCreateOrUpdateSurveyDisabled(t *testing.T) {
@@ -297,7 +336,7 @@ func TestCreateOrUpdateSurveyDisabled(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -337,7 +376,7 @@ func TestCreateOrUpdateSurveyDisabledError(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -370,7 +409,7 @@ func TestDeleteUnwantedMissing(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
@@ -406,11 +445,11 @@ func TestDeleteUnwantedMissingServicePlan(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	// Can't use the same rows in multiple calls
 	rows2 := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -457,11 +496,11 @@ func TestDeleteUnwanted(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	// Can't use the same rows in multiple calls
 	rows2 := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
 	so := ServiceOffering{SourceID: sourceID, TenantID: tenantID}
@@ -525,11 +564,11 @@ func TestDeleteUnwantedErrorInDelete(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	// Can't use the same rows in multiple calls
 	rows2 := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)
@@ -571,7 +610,7 @@ func TestDeleteUnwantedMissingInstance(t *testing.T) {
 		t.Fatalf("Error encoding extra data")
 	}
 	rows := sqlmock.NewRows(columns).
-		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), encodedExtra)
+		AddRow(id, tenantID, sourceID, srcRef, "Test", "", "Test Description", time.Now(), time.Now(), time.Now(), time.Now(), encodedExtra)
 
 	ctx := context.TODO()
 	sor := NewGORMRepository(gdb)

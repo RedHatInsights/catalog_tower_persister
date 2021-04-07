@@ -108,10 +108,10 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	/*si.SourceUpdatedAt, err = base.TowerTime(attrs["modified"].(string))
+	si.SourceUpdatedAt, err = base.TowerTime(attrs["modified"].(string))
 	if err != nil {
 		return err
-	}*/
+	}
 	si.Description = attrs["description"].(string)
 	si.Name = attrs["name"].(string)
 	si.SourceRef = attrs["id"].(json.Number).String()
@@ -121,7 +121,7 @@ func (si *ServiceInventory) makeObject(attrs map[string]interface{}) error {
 func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, si *ServiceInventory, attrs map[string]interface{}) error {
 	err := si.makeObject(attrs)
 	if err != nil {
-		logger.Infof("Error creating a new service inventory object %v", err)
+		logger.Errorf("Error creating a new service inventory object %v", err)
 		return err
 	}
 	var instance ServiceInventory
@@ -141,17 +141,20 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 		logger.Infof("Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
 		si.ID = instance.ID // Get the Existing ID for the object
 
-		logger.Infof("Updating Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
-		instance.Name = si.Name
-		instance.Description = si.Description
-		instance.Extra = si.Extra
-		logger.Infof("Saving Inventory source ref %s", si.SourceRef)
-		err := gr.db.Save(&instance).Error
-		if err != nil {
-			logger.Errorf("Error Updating Service Inventory %s %v", si.SourceRef, err)
-			return err
+		if instance.SourceUpdatedAt != si.SourceUpdatedAt {
+			logger.Infof("Updating Inventory %s exists in DB with ID %d", si.SourceRef, instance.ID)
+			instance.Name = si.Name
+			instance.Description = si.Description
+			instance.Extra = si.Extra
+			instance.SourceUpdatedAt = si.SourceUpdatedAt
+			logger.Infof("Saving Inventory source ref %s", si.SourceRef)
+			err := gr.db.Save(&instance).Error
+			if err != nil {
+				logger.Errorf("Error Updating Service Inventory %s %v", si.SourceRef, err)
+				return err
+			}
+			gr.updates++
 		}
-		gr.updates++
 	}
 	return nil
 }
