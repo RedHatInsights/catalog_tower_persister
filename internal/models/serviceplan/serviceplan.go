@@ -1,6 +1,7 @@
 package serviceplan
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -81,17 +82,19 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 	} else {
 		logger.Infof("Survey Spec %s exists in DB with ID %d", sp.SourceRef, instance.ID)
 		sp.ID = instance.ID // Get the Existing ID for the object
-		instance.CreateJSONSchema = sp.CreateJSONSchema
-		instance.Description = sp.Description
-		instance.Name = sp.Name
+		if bytes.Compare(instance.CreateJSONSchema, sp.CreateJSONSchema) != 0 {
+			instance.CreateJSONSchema = sp.CreateJSONSchema
+			instance.Description = sp.Description
+			instance.Name = sp.Name
 
-		logger.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
-		err := gr.db.Save(&instance).Error
-		if err != nil {
-			logger.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
-			return err
+			logger.Infof("Saving Survey Spec  source_ref %s", sp.SourceRef)
+			err := gr.db.Save(&instance).Error
+			if err != nil {
+				logger.Errorf("Error Updating Service Plan  source_ref %s", sp.SourceRef)
+				return err
+			}
+			gr.updates++
 		}
-		gr.updates++
 	}
 	return nil
 }

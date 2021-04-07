@@ -56,7 +56,7 @@ func (gr *gormRepository) Stats() map[string]int {
 func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, sc *ServiceCredential, attrs map[string]interface{}) error {
 	err := sc.makeObject(attrs)
 	if err != nil {
-		logger.Infof("Error creating a new service credential object %v", err)
+		logger.Errorf("Error creating a new service credential object %v", err)
 		return err
 	}
 
@@ -70,7 +70,7 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 			}
 			gr.creates++
 		} else {
-			logger.Infof("Error locating Credential %s %v", sc.SourceRef, err)
+			logger.Errorf("Error locating Credential %s %v", sc.SourceRef, err)
 			return err
 		}
 	} else {
@@ -80,13 +80,16 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 		instance.Name = sc.Name
 		instance.ServiceCredentialTypeSourceRef = sc.ServiceCredentialTypeSourceRef
 
-		logger.Infof("Saving Service Credential source_ref %s", sc.SourceRef)
-		err := gr.db.Save(&instance).Error
-		if err != nil {
-			logger.Errorf("Error Updating Service Credential  source_ref %s", sc.SourceRef)
-			return err
+		if instance.SourceUpdatedAt != sc.SourceUpdatedAt {
+			instance.SourceUpdatedAt = sc.SourceUpdatedAt
+			logger.Infof("Saving Service Credential source_ref %s", sc.SourceRef)
+			err := gr.db.Save(&instance).Error
+			if err != nil {
+				logger.Errorf("Error Updating Service Credential  source_ref %s", sc.SourceRef)
+				return err
+			}
+			gr.updates++
 		}
-		gr.updates++
 	}
 	return nil
 }
@@ -137,10 +140,10 @@ func (sc *ServiceCredential) makeObject(attrs map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	/*sc.SourceUpdatedAt, err = towerTime(attrs["modified"].(string))
+	sc.SourceUpdatedAt, err = base.TowerTime(attrs["modified"].(string))
 	if err != nil {
 		return err
-	}*/
+	}
 	sc.Description = attrs["description"].(string)
 	sc.Name = attrs["name"].(string)
 	sc.SourceRef = attrs["id"].(json.Number).String()

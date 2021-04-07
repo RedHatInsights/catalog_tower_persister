@@ -72,7 +72,7 @@ func (gr *gormRepository) Stats() map[string]int {
 func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, son *ServiceOfferingNode, attrs map[string]interface{}) error {
 	err := son.makeObject(attrs)
 	if err != nil {
-		logger.Infof("Error creating a new service offering node object %v", err)
+		logger.Errorf("Error creating a new service offering node object %v", err)
 		return err
 	}
 	var instance ServiceOfferingNode
@@ -84,25 +84,28 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 				return fmt.Errorf("Error creating service offering node : %v", result.Error.Error())
 			}
 		} else {
-			logger.Infof("Error locating Service Offering Node %s %v", son.SourceRef, err)
+			logger.Errorf("Error locating Service Offering Node %s %v", son.SourceRef, err)
 			return err
 		}
 		gr.creates++
 	} else {
 		logger.Infof("Service Offering Node %s exists in DB with ID %d", son.SourceRef, instance.ID)
 		son.ID = instance.ID // Get the Existing ID for the object
-		instance.RootServiceOfferingSourceRef = son.RootServiceOfferingSourceRef
-		instance.ServiceOfferingSourceRef = son.ServiceOfferingSourceRef
-		instance.Name = son.Name
-		instance.ServiceInventorySourceRef = son.ServiceInventorySourceRef
+		if instance.SourceUpdatedAt != son.SourceUpdatedAt {
+			instance.SourceUpdatedAt = son.SourceUpdatedAt
+			instance.RootServiceOfferingSourceRef = son.RootServiceOfferingSourceRef
+			instance.ServiceOfferingSourceRef = son.ServiceOfferingSourceRef
+			instance.Name = son.Name
+			instance.ServiceInventorySourceRef = son.ServiceInventorySourceRef
 
-		logger.Infof("Saving Service Offering source_ref %s", son.SourceRef)
-		err := gr.db.Save(&instance).Error
-		if err != nil {
-			logger.Errorf("Error Updating Service Offering Node  source_ref %s", son.SourceRef)
-			return err
+			logger.Infof("Saving Service Offering source_ref %s", son.SourceRef)
+			err := gr.db.Save(&instance).Error
+			if err != nil {
+				logger.Errorf("Error Updating Service Offering Node  source_ref %s", son.SourceRef)
+				return err
+			}
+			gr.updates++
 		}
-		gr.updates++
 	}
 	return nil
 }
@@ -167,10 +170,11 @@ func (son *ServiceOfferingNode) makeObject(attrs map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	/*son.SourceUpdatedAt, err = towerTime(attrs["modified"].(string))
+
+	son.SourceUpdatedAt, err = base.TowerTime(attrs["modified"].(string))
 	if err != nil {
 		return err
-	} */
+	}
 	son.SourceRef = attrs["id"].(json.Number).String()
 	son.RootServiceOfferingSourceRef = attrs["workflow_job_template"].(json.Number).String()
 	son.ServiceOfferingSourceRef = attrs["unified_job_template"].(json.Number).String()

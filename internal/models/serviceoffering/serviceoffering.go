@@ -66,7 +66,7 @@ func (gr *gormRepository) Stats() map[string]int {
 func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Entry, so *ServiceOffering, attrs map[string]interface{}, spr serviceplan.Repository) error {
 	err := so.makeObject(attrs)
 	if err != nil {
-		logger.Infof("Error creating a new service offering object %v", err)
+		logger.Errorf("Error creating a new service offering object %v", err)
 		return err
 	}
 	instance, err := so.getInstance(ctx, logger, gr.db)
@@ -85,9 +85,10 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 		logger.Infof("Job Template %s exists in DB with ID %d", so.SourceRef, instance.ID)
 		so.ID = instance.ID // Get the Existing ID for the object
 
-		if !instance.equal(so) {
+		if instance.SourceUpdatedAt != so.SourceUpdatedAt {
 			logger.Infof("Updating Job Template %s exists in DB with ID %d", so.SourceRef, instance.ID)
 			instance.Name = so.Name
+			instance.SourceUpdatedAt = so.SourceUpdatedAt
 			instance.Description = so.Description
 			instance.ServiceInventory = serviceinventory.ServiceInventory{}
 			if !so.SurveyEnabled && instance.SurveyEnabled {
@@ -206,10 +207,10 @@ func (so *ServiceOffering) makeObject(attrs map[string]interface{}) error {
 	if err != nil {
 		return err
 	}
-	/*so.SourceUpdatedAt, err = base.TowerTime(attrs["modified"].(string))
+	so.SourceUpdatedAt, err = base.TowerTime(attrs["modified"].(string))
 	if err != nil {
 		return err
-	}*/
+	}
 	so.Description = attrs["description"].(string)
 	so.Name = attrs["name"].(string)
 	so.SourceRef = attrs["id"].(json.Number).String()
@@ -222,14 +223,6 @@ func (so *ServiceOffering) makeObject(attrs map[string]interface{}) error {
 		}
 	}
 	return nil
-}
-
-func (so *ServiceOffering) equal(other *ServiceOffering) bool {
-	return so.Name == other.Name &&
-		so.Description == other.Description &&
-		so.ServiceInventory.SourceRef == other.SourceRef &&
-		so.SurveyEnabled == other.SurveyEnabled
-
 }
 
 func (so *ServiceOffering) getDeleteIDs(ctx context.Context, logger *logrus.Entry, tx *gorm.DB, keepSourceRefs []string) ([]base.ResultIDRef, error) {
