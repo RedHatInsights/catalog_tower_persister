@@ -1,13 +1,13 @@
 package serviceplan
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/sirupsen/logrus"
@@ -82,7 +82,18 @@ func (gr *gormRepository) CreateOrUpdate(ctx context.Context, logger *logrus.Ent
 	} else {
 		logger.Infof("Survey Spec %s exists in DB with ID %d", sp.SourceRef, instance.ID)
 		sp.ID = instance.ID // Get the Existing ID for the object
-		if bytes.Compare(instance.CreateJSONSchema, sp.CreateJSONSchema) != 0 {
+
+		var data1 map[string]interface{}
+		var data2 map[string]interface{}
+		if err := json.Unmarshal(instance.CreateJSONSchema, &data1); err != nil {
+			logger.Errorf("Error Unmarshalling spec %v", err)
+			return err
+		}
+		if err = json.Unmarshal(sp.CreateJSONSchema, &data2); err != nil {
+			logger.Errorf("Error Unmarshalling spec %v", err)
+			return err
+		}
+		if !reflect.DeepEqual(data1, data2) {
 			instance.CreateJSONSchema = sp.CreateJSONSchema
 			instance.Description = sp.Description
 			instance.Name = sp.Name
