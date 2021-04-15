@@ -19,6 +19,8 @@ type TowerPersisterConfig struct {
 	DatabaseName         string
 	DatabaseUsername     string
 	DatabasePassword     string
+	DatabaseSslMode      string
+	DatabaseRootCertPath string
 	KafkaBrokers         []string
 	KafkaGroupID         string
 	KafkaTopic           string
@@ -41,8 +43,8 @@ type TowerPersisterConfig struct {
 func Get() *TowerPersisterConfig {
 
 	options := viper.New()
-
-	if os.Getenv("CLOWDER_ENABLED") == "true" {
+	options.SetDefault("DatabaseRootCertPath", "")
+	if clowder.IsClowderEnabled() {
 		cfg := clowder.LoadedConfig
 
 		options.SetDefault("DatabaseHostname", cfg.Database.Hostname)
@@ -50,6 +52,14 @@ func Get() *TowerPersisterConfig {
 		options.SetDefault("DatabaseName", cfg.Database.Name)
 		options.SetDefault("DatabaseUsername", cfg.Database.Username)
 		options.SetDefault("DatabasePassword", cfg.Database.Password)
+		options.SetDefault("DatabaseSslMode", cfg.Database.SslMode)
+		if cfg.Database.RdsCa != nil {
+			certPath, err := cfg.RdsCa()
+			if err != nil {
+				panic("Error creating root cert file")
+			}
+			options.SetDefault("DatabaseRootCertPath", certPath)
+		}
 		options.SetDefault("WebPort", cfg.WebPort)
 		options.SetDefault("MetricsPort", cfg.MetricsPort)
 		options.SetDefault("KafkaBrokers", fmt.Sprintf("%s:%v", cfg.Kafka.Brokers[0].Hostname, *cfg.Kafka.Brokers[0].Port))
@@ -78,6 +88,7 @@ func Get() *TowerPersisterConfig {
 		options.SetDefault("DatabasePassword", os.Getenv("DATABASE_PASSWORD"))
 		options.SetDefault("DatabaseName", os.Getenv("DATABASE_NAME"))
 		options.SetDefault("KafkaTopic", "platform.catalog.persister")
+		options.SetDefault("DatabaseSslMode", "disable")
 	}
 
 	options.SetDefault("KafkaGroupID", "tower_persister")
@@ -100,6 +111,8 @@ func Get() *TowerPersisterConfig {
 		DatabaseName:         options.GetString("DatabaseName"),
 		DatabaseUsername:     options.GetString("DatabaseUsername"),
 		DatabasePassword:     options.GetString("DatabasePassword"),
+		DatabaseSslMode:      options.GetString("DatabaseSslMode"),
+		DatabaseRootCertPath: options.GetString("DatabaseRootCertPath"),
 		KafkaBrokers:         options.GetStringSlice("KafkaBrokers"),
 		KafkaGroupID:         options.GetString("KafkaGroupID"),
 		KafkaTopic:           options.GetString("KafkaTopic"),
@@ -115,6 +128,6 @@ func Get() *TowerPersisterConfig {
 		AwsRegion:            options.GetString("AwsRegion"),
 		AwsAccessKeyID:       options.GetString("AwsAccessKeyId"),
 		AwsSecretAccessKey:   options.GetString("AwsSecretAccessKey"),
-		UseClowder:           os.Getenv("CLOWDER_ENABLED") == "true",
+		UseClowder:           clowder.IsClowderEnabled(),
 	}
 }
