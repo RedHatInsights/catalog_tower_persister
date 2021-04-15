@@ -40,14 +40,18 @@ func main() {
 		return fmt.Sprintf("%d", runtime.NumGoroutine())
 	}))
 
-	dsn := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable",
-		cfg.DatabaseUsername,
-		cfg.DatabasePassword,
+	dsn := fmt.Sprintf(
+		"host=%s port=%d dbname=%s user=%s password=%s sslmode=%s",
 		cfg.DatabaseHostname,
 		cfg.DatabasePort,
-		cfg.DatabaseName)
-	if dsn == "" {
-		panic("DATABASE_URL environment variable not set")
+		cfg.DatabaseName,
+		cfg.DatabaseUsername,
+		cfg.DatabasePassword,
+		cfg.DatabaseSslMode,
+	)
+
+	if cfg.DatabaseRootCertPath != "" {
+		dsn += fmt.Sprintf(" sslrootcert=%s", cfg.DatabaseRootCertPath)
 	}
 
 	sigs := make(chan os.Signal, 1)
