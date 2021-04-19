@@ -42,23 +42,37 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 
 	tenant, source, err := setup(logger, db, message.TenantID, message.SourceID)
 	if err != nil {
-		updateTask(logger, "completed", "error", err.Error(), nil, p)
 		logger.Errorf("Error setting up tenant and source %v", err)
+		err = updateTask(logger, "completed", "error", err.Error(), nil, p)
+		if err != nil {
+			logger.Errorf("Error updating task %v", err)
+		}
 		return
 	}
 
-	updateTask(logger, "running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil, p)
+	err = updateTask(logger, "running", "ok", fmt.Sprintf("Processing file size %d", message.Size), nil, p)
+	if err != nil {
+		logger.Errorf("Error updating task  to running state %v", err)
+		return
+	}
+
 	dbTransaction := db.DB.Begin()
 	bol := payload.MakeBillOfLading(logger, tenant, source, nil, dbTransaction)
 	err = p.ProcessTar(newCtx, logger, bol, &http.Client{}, dbTransaction, message.DataURL, shutdown)
 	if err != nil {
 		logger.Errorf("Rolling back database changes %v", err)
 		dbTransaction.Rollback()
-		updateTask(logger, "completed", "error", err.Error(), nil, p)
+		err = updateTask(logger, "completed", "error", err.Error(), nil, p)
+		if err != nil {
+			logger.Errorf("Error updating task %v", err)
+		}
 	} else {
 		dbTransaction.Commit()
 		logger.Info("Commited database changes")
-		updateTask(logger, "completed", "ok", "Success", bol.GetStats(newCtx), p)
+		err = updateTask(logger, "completed", "ok", "Success", bol.GetStats(newCtx), p)
+		if err != nil {
+			logger.Errorf("Error updating task %v", err)
+		}
 	}
 }
 

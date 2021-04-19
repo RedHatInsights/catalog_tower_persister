@@ -42,7 +42,7 @@ func startKafkaListener(dbContext DatabaseContext, logger *logrus.Logger, shutdo
 
 	// Check for errors in creating the Consumer
 	if err != nil {
-		if ke, ok := err.(kafka.Error); ok == true {
+		if ke, ok := err.(kafka.Error); ok {
 			switch ec := ke.Code(); ec {
 			case kafka.ErrInvalidArg:
 				logger.Errorf("Invalid args to configure Kafka consumer. Code %d %v", ec, err)
@@ -119,27 +119,21 @@ func handleMessages(ctx context.Context, c *kafka.Consumer, dbContext DatabaseCo
 			if ev := c.Poll(1000); ev == nil {
 				continue
 			} else {
-				switch ev.(type) {
+				switch ev := ev.(type) {
 
 				case *kafka.Message:
-					km := ev.(*kafka.Message)
-					processMessage(ctx, dbContext, logger, shutdown, wg, km)
+					processMessage(ctx, dbContext, logger, shutdown, wg, ev)
 
 				case kafka.PartitionEOF:
-					pe := ev.(kafka.PartitionEOF)
 					terminate = true
 					logger.Infof("Got to the end of partition %v on topic %v at offset %v\n",
-						pe.Partition,
-						string(*pe.Topic),
-						pe.Offset)
-					break
-
+						ev.Partition,
+						string(*ev.Topic),
+						ev.Offset)
 				case kafka.OffsetsCommitted:
 					continue
-
 				case kafka.Error:
-					em := ev.(kafka.Error)
-					logger.Infof("Kafka error %v", em)
+					logger.Infof("Kafka error %v", ev)
 
 				default:
 					logger.Infof("Got an event that's not a Message, Error, or PartitionEOF %v", ev)
