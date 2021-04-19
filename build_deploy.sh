@@ -2,7 +2,7 @@
 
 set -exv
 
-IMAGE="quay.io/cloudservices/catalog-tower-persister"
+IMAGE="quay.io/cloudservices/catalog_tower_persister"
 IMAGE_TAG=$(git rev-parse --short=7 HEAD)
 
 if [[ -z "$QUAY_USER" || -z "$QUAY_TOKEN" ]]; then
