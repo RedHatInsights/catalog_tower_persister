@@ -56,7 +56,6 @@ objects:
     kafkaTopics:
     - topicName: platform.catalog.persister
     database:
-      name: catalog_inventory_production
       sharedDbAppName: catalog-inventory
     dependencies:
     - catalog-inventory
