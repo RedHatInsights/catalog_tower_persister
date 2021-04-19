@@ -24,10 +24,6 @@ type MockConverter struct {
 	err  error
 }
 
-var mockReader = strings.NewReader("hello")
-
-var mockSpec = `{"page": 1, "fruits": ["apple", "peach"]}`
-
 func (mc *MockConverter) Convert(ctx context.Context, logger *logrus.Entry, r io.Reader) ([]byte, error) {
 	return []byte(mc.data), mc.err
 }

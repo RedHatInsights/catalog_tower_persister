@@ -66,13 +66,6 @@ var text3 = `{
 	]
 }`
 
-var xtext4 = `{
-    "name": "",
-    "description": "",
-    "spec": [
-       ]
-}`
-
 var text4 = `{
     "name": "",
     "description": "",

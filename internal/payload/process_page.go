@@ -25,6 +25,7 @@ type pageResponse map[string]interface{}
 var surveySpecRe = regexp.MustCompile(`api\/v2\/(job_templates|workflow_job_templates)\/(.*)\/survey_spec/page1.json`)
 
 var objTypeRe = regexp.MustCompile(`\/api\/v2\/(.*)\/`)
+var idObjTypeRe = regexp.MustCompile(`\/api\/v2\/(.*)\/id`)
 
 // ProcessPage handles one file at a time from the tar file
 func (bol *BillOfLading) ProcessPage(ctx context.Context, url string, r io.Reader) error {
@@ -56,6 +57,11 @@ func (bol *BillOfLading) ProcessPage(ctx context.Context, url string, r io.Reade
 			for _, obj := range val.([]interface{}) {
 				if ids {
 					err = bol.addIDList(ctx, obj.(map[string]interface{}), objectType)
+					if err != nil {
+						bol.logger.Errorf("Error adding ids %s", objectType)
+						bol.logger.Errorf("Error %v", err)
+						return err
+					}
 				} else {
 					err = bol.addObject(ctx, obj.(map[string]interface{}), url, nil)
 					if err != nil {
@@ -190,11 +196,7 @@ func (bol *BillOfLading) addObject(ctx context.Context, obj map[string]interface
 		}
 
 		if so.ServiceInventorySourceRef != "" {
-			if _, ok := bol.inventoryMap[so.ServiceInventorySourceRef]; ok {
-				bol.inventoryMap[so.ServiceInventorySourceRef] = append(bol.inventoryMap[so.ServiceInventorySourceRef], so.ID)
-			} else {
-				bol.inventoryMap[so.ServiceInventorySourceRef] = []int64{so.ID}
-			}
+			bol.inventoryMap[so.ServiceInventorySourceRef] = append(bol.inventoryMap[so.ServiceInventorySourceRef], so.ID)
 		}
 
 	case "inventory":
@@ -229,11 +231,7 @@ func (bol *BillOfLading) addObject(ctx context.Context, obj map[string]interface
 		}
 
 		if sc.ServiceCredentialTypeSourceRef != "" {
-			if _, ok := bol.serviceCredentialToCredentialTypeMap[sc.ServiceCredentialTypeSourceRef]; ok {
-				bol.serviceCredentialToCredentialTypeMap[sc.ServiceCredentialTypeSourceRef] = append(bol.serviceCredentialToCredentialTypeMap[sc.ServiceCredentialTypeSourceRef], sc.ID)
-			} else {
-				bol.serviceCredentialToCredentialTypeMap[sc.ServiceCredentialTypeSourceRef] = []int64{sc.ID}
-			}
+			bol.serviceCredentialToCredentialTypeMap[sc.ServiceCredentialTypeSourceRef] = append(bol.serviceCredentialToCredentialTypeMap[sc.ServiceCredentialTypeSourceRef], sc.ID)
 		}
 	case "credential_type":
 		sct := &servicecredentialtype.ServiceCredentialType{SourceID: bol.source.ID, TenantID: bol.tenant.ID}
@@ -260,9 +258,12 @@ func getObjectType(url string) (string, error) {
 	if strings.HasSuffix(url, "survey_spec/page1.json") {
 		return "survey_spec", nil
 	}
-	s := objTypeRe.FindStringSubmatch(url)
+	s := idObjTypeRe.FindStringSubmatch(url)
 	if len(s) < 1 {
-		return "", fmt.Errorf("Could not get object type from url %s", url)
+		s = objTypeRe.FindStringSubmatch(url)
+		if len(s) < 1 {
+			return "", fmt.Errorf("Could not get object type from url %s", url)
+		}
 	}
 	return s[1], nil
 }

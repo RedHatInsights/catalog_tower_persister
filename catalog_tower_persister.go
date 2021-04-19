@@ -82,7 +82,10 @@ func main() {
 func startPrometheus(cfg *config.TowerPersisterConfig) {
 	prometheusMux := http.NewServeMux()
 	prometheusMux.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(fmt.Sprintf(":%d", cfg.MetricsPort), prometheusMux)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", cfg.MetricsPort), prometheusMux)
+	if err != nil {
+		fmt.Printf("Error starting Prometheus listener %v\n", err)
+	}
 }
 
 func startProbes(cfg *config.TowerPersisterConfig, isReady *atomic.Value) {
@@ -100,5 +103,8 @@ func startProbes(cfg *config.TowerPersisterConfig, isReady *atomic.Value) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	http.ListenAndServe(fmt.Sprintf(":%d", cfg.WebPort), probeMux)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", cfg.WebPort), probeMux)
+	if err != nil {
+		fmt.Printf("Error starting Probe listener %v\n", err)
+	}
 }
