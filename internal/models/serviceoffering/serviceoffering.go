@@ -11,7 +11,6 @@ import (
 
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/base"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceinventory"
-	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceofferingicon"
 	"github.com/RedHatInsights/catalog_tower_persister/internal/models/serviceplan"
 	"github.com/sirupsen/logrus"
 
@@ -32,8 +31,6 @@ type ServiceOffering struct {
 	SourceID                  int64
 	ServiceInventoryID        sql.NullInt64 `gorm:"default:null"`
 	ServiceInventory          serviceinventory.ServiceInventory
-	ServiceOfferingIconID     sql.NullInt64 `gorm:"default:null"`
-	ServiceOfferingIcon       serviceofferingicon.ServiceOfferingIcon
 	ServiceInventorySourceRef string `gorm:"-"`
 	SurveyEnabled             bool   `gorm:"-"`
 }
