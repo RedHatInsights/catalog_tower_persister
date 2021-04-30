@@ -170,7 +170,7 @@ func TestCreate(t *testing.T) {
 		WillReturnError(gorm.ErrRecordNotFound)
 	mock.ExpectQuery(regexp.QuoteMeta(`INSERT INTO "service_offerings"`)).
 		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, testhelper.AnyTime{}, testhelper.AnyTime{}, sqlmock.AnyArg(), defaultAttrs["name"], defaultAttrs["description"], sqlmock.AnyArg(), tenantID, sourceID).
-		WillReturnRows(sqlmock.NewRows([]string{"service_offering_icon_id", "id", "service_inventory_id"}).AddRow(5, newID, 6))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "service_inventory_id"}).AddRow(newID, 6))
 	err := sor.CreateOrUpdate(ctx, testhelper.TestLogger(), &so, defaultAttrs, &MockServicePlanRepository{})
 	assert.Nil(t, err, "CreateOrUpdate failed")
 	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
