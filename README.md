@@ -1,9 +1,8 @@
 # Catalog Tower Persister
 
 Catalog Tower Persister adds/updates/removes Ansible Tower objects in the Catalog Inventory
-database. It gets information about these objects in a compressed tar file from the Upload Service.
-Once the Catalog Worker uploads the file, the Ingress Service sends a message on the kafka
-topic **platform.upload.catalog** with the payload details and a URL to download the file.
+database. It works as a helper to the Catalog Inventory Service. The Catalog Inventory service 
+doles out work to the persister. Catalog Inventory Service is responsible for managing the inventory collection process. It sends out inventory collection request to the remote catalog worker. It tracks upload of the tar files from the remote catalog worker delivered via the Ingress Service. Once the payload has been deposited in the S3 bucket by the Ingress service, it sends a Kafka message to the Catalog Inventory service, which then sends a Kafka message to the Persister with the payload details.
 
 Kafka Payload info
 ```json
