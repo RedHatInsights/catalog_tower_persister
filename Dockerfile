@@ -1,4 +1,4 @@
-FROM registry.redhat.io/ubi8/go-toolset
+FROM registry.redhat.io/ubi8/go-toolset:1.14.12
 
 WORKDIR /go/src/app
 COPY . .
@@ -10,7 +10,7 @@ RUN go get -d ./... && \
 
 RUN cp /opt/app-root/src/go/bin/catalog_tower_persister /usr/bin/
 
-#RUN yum remove -y kernel-headers npm nodejs nodejs-full-i18n && yum update -y && yum clean all
+RUN yum remove -y kernel-headers npm nodejs nodejs-full-i18n && yum update -y && yum clean all
 
 USER 1001
 CMD ["catalog_tower_persister"]
