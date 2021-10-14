@@ -51,3 +51,12 @@ func SourceRefExists(srcRef string, sortedRefs []string, length int) bool {
 	}
 	return true
 }
+
+//ToSafeString converts a JSON parsed interface to empty string if the value is nil
+func ToSafeString(v interface{}) string {
+	str, ok := v.(string)
+	if ok {
+		return str
+	}
+	return ""
+}

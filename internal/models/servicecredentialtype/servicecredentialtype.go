@@ -147,7 +147,7 @@ func (sct *ServiceCredentialType) makeObject(attrs map[string]interface{}) error
 	}
 	sct.Description = attrs["description"].(string)
 	sct.Kind = attrs["kind"].(string)
-	sct.Namespace = attrs["namespace"].(string)
+	sct.Namespace = base.ToSafeString(attrs["namespace"])
 	sct.Name = attrs["name"].(string)
 	sct.SourceRef = attrs["id"].(json.Number).String()
 	return nil
