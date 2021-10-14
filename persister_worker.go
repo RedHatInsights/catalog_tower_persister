@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -32,6 +33,14 @@ func startPersisterWorker(ctx context.Context, db DatabaseContext, logger *logru
 	defer logger.Info("Persister Worker finished")
 	defer wg.Done()
 	logger.Info("Persister Worker started")
+
+	defer func() {
+		if err := recover(); err != nil {
+
+			logger.Errorf("Stack Trace %s", string(debug.Stack()))
+			logger.Errorf("Panic occured %v", err)
+		}
+	}()
 	duration := 15 * time.Minute
 	newCtx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
