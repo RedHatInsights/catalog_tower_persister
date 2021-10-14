@@ -77,6 +77,49 @@ func TestCreateMissingParams(t *testing.T) {
 	checkErrors(t, err, mock, scr, "Expecting invalid attributes", "Missing Required Attribute description")
 }
 
+func TestCreateNilNamespace(t *testing.T) {
+	gdb, mock, teardown := testhelper.MockDBSetup(t)
+	defer teardown()
+	attrs := map[string]interface{}{
+		"created":     "2020-01-08T10:22:59.423567Z",
+		"modified":    "2020-01-08T10:22:59.423585Z",
+		"description": "My desc",
+		"id":          json.Number("4"),
+		"name":        "demo",
+		"type":        objectType,
+		"namespace":   nil,
+		"kind":        "test",
+	}
+
+	ctx := context.TODO()
+	scr := NewGORMRepository(gdb)
+	srcRef := "4"
+	newID := int64(78)
+	sct := ServiceCredentialType{SourceID: sourceID, TenantID: tenantID}
+	str := `SELECT * FROM "service_credential_types" WHERE "service_credential_types"."source_ref" = $1 AND "service_credential_types"."source_id" = $2 AND "service_credential_types"."archived_at" IS NULL ORDER BY "service_credential_types"."id" LIMIT 1`
+
+	mock.ExpectQuery(regexp.QuoteMeta(str)).
+		WithArgs(srcRef, sourceID).
+		WillReturnError(gorm.ErrRecordNotFound)
+	insertStr := `INSERT INTO "service_credential_types" ("created_at","updated_at","archived_at","source_ref","source_created_at","source_updated_at","last_seen_at","name","description","kind","namespace","tenant_id","source_id") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`
+
+	mock.ExpectQuery(regexp.QuoteMeta(insertStr)).
+		WithArgs(testhelper.AnyTime{}, testhelper.AnyTime{}, nil, srcRef, testhelper.AnyTime{}, testhelper.AnyTime{}, sqlmock.AnyArg(), attrs["name"].(string), attrs["description"].(string), attrs["kind"].(string), "", tenantID, sourceID).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(newID))
+	err := scr.CreateOrUpdate(ctx, testhelper.TestLogger(), &sct, attrs)
+	assert.Nil(t, err, "TestCreateNilNamespace failed")
+	assert.NoError(t, mock.ExpectationsWereMet(), "There were unfulfilled expectations")
+	stats := scr.Stats()
+	assert.Equal(t, stats["adds"], 1)
+	assert.Equal(t, stats["updates"], 0)
+	assert.Equal(t, stats["deletes"], 0)
+	// TODO: Since the order of the returning is not guranteed in GORM we can't check the ID
+	// Its most probably happening because they are using maps to store fields and the order of the
+	// keys when retrieving a map is not guaranteed
+	// assert.Equal(t, sc.ID, newID)
+
+}
+
 func TestCreateErrorLocatingRecord(t *testing.T) {
 	gdb, mock, teardown := testhelper.MockDBSetup(t)
 	defer teardown()
