@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -29,6 +30,12 @@ func main() {
 	log := logger.InitLogger()
 	log.Info("Starting Catalog Tower Persister")
 	defer log.Info("Finished Catalog Worker")
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error("panic occurred:", err)
+			log.Error("Stack Trace ", string(debug.Stack()))
+		}
+	}()
 
 	isReady := &atomic.Value{}
 	isReady.Store(false)
