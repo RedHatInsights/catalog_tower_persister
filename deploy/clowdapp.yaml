@@ -59,7 +59,7 @@ objects:
     database:
       sharedDbAppName: catalog-inventory
     dependencies:
-    - catalog-inventory
+    - catalog_inventory-api
 
 parameters:
 - name: LOG_LEVEL
