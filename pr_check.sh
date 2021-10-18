@@ -4,7 +4,7 @@
 # Options that must be configured by app owner
 # --------------------------------------------
 APP_NAME="catalog-tower-persister"  # name of app-sre "application" folder this component lives in
-COMPONENT_NAME="catalog-tower-persister"  # name of app-sre "resourceTemplate" in deploy.yaml for this component
+COMPONENT_NAME="catalog_tower_persister"  # name of app-sre "resourceTemplate" in deploy.yaml for this component
 IMAGE="quay.io/cloudservices/catalog_tower_persister"  
 
 IQE_PLUGINS="catalog-tower-persister"
