@@ -164,6 +164,12 @@ func getOptions(f *field) []map[string]interface{} {
 			return nil
 		}
 		values = strings.Split(value, "\n")
+	case []interface{}:
+		for _, v := range f.Choices.([]interface{}) {
+			if v, ok := v.(string); ok {
+				values = append(values, v)
+			}
+		}
 	case []string:
 		values = f.Choices.([]string)
 	default:
