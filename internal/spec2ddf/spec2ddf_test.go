@@ -179,6 +179,42 @@ var text9 = `{
        ]
 }`
 
+var text10 = `{
+    "name": "",
+    "description": "",
+    "spec": [
+        {
+            "question_name": "Hobbies",
+            "question_description": "Select your hobbies",
+            "required": true,
+            "type": "multiselect",
+            "variable": "hobbies",
+            "min": null,
+            "max": null,
+            "default": "Cricket",
+            "choices": ["Lawn Tennis","Cycling", "Table Tennis","Cricket","Flying Kites"],
+            "new_question": true
+        }
+	]
+}`
+var text11 = `{
+    "name": "",
+    "description": "",
+    "spec": [
+        {
+            "question_name": "House Number",
+            "question_description": "Select your house number",
+            "required": true,
+            "type": "multiselect",
+            "variable": "house_number",
+            "min": null,
+            "max": null,
+            "default": "Cricket",
+            "choices": [29,39,49],
+            "new_question": true
+        }
+	]
+}`
 var specTests = []struct {
 	data     string
 	name     string
@@ -194,6 +230,8 @@ var specTests = []struct {
 	{text7, "TestMultipleChoice", `"component":"select-field"`, ""},
 	{text8, "TestBadFieldType", "", "Unsupported field type"},
 	{text9, "TestMultipleChoiceNoDefault", `"component":"select-field"`, ""},
+	{text10, "TestMultiSelect", `"component":"select-field"`, ""},
+	{text11, "TestMultiSelect", `"component":"select-field"`, ""},
 }
 
 func TestSpec(t *testing.T) {
