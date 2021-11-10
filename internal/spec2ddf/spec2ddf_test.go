@@ -215,6 +215,23 @@ var text11 = `{
         }
 	]
 }`
+var text12 = `{
+    "name": "",
+    "description": "",
+    "spec": [
+        {
+            "question_name": "Username",
+            "question_description": "Please enter Username",
+            "required": true,
+            "type": "text",
+            "variable": "username",
+            "min": 0,
+            "max": 1024,
+            "choices": "",
+            "new_question": true
+        }
+       ]
+}`
 var specTests = []struct {
 	data     string
 	name     string
@@ -232,6 +249,7 @@ var specTests = []struct {
 	{text9, "TestMultipleChoiceNoDefault", `"component":"select-field"`, ""},
 	{text10, "TestMultiSelect", `"component":"select-field"`, ""},
 	{text11, "TestMultiSelect", `"component":"select-field"`, ""},
+	{text12, "TestTextNoDefault", `"initialValue":""`, ""},
 }
 
 func TestSpec(t *testing.T) {

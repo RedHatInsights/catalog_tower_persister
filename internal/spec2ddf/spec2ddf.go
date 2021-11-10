@@ -102,6 +102,9 @@ func getDDFField(f *field) (*ddfField, error) {
 		ddff.Multi = true
 	} else if f.Type == "text" {
 		ddff.Component = "text-field"
+		if ddff.InitialValue == nil {
+			ddff.InitialValue = ""
+		}
 	} else if f.Type == "integer" {
 		ddff.Type = "number"
 		ddff.DataType = "integer"
