@@ -1,4 +1,4 @@
-FROM registry.redhat.io/ubi8/go-toolset:1.14.12
+FROM registry.redhat.io/ubi8/go-toolset:1.15.14
 
 WORKDIR /go/src/app
 COPY . .
