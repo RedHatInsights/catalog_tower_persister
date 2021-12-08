@@ -66,6 +66,27 @@ func TestCreateMissingParams(t *testing.T) {
 	checkErrors(t, err, mock, sonr, "Expecting invalid attributes", "Missing Required Attribute created")
 }
 
+func TestCreateNullJobType(t *testing.T) {
+	gdb, mock, teardown := testhelper.MockDBSetup(t)
+	defer teardown()
+
+	ctx := context.TODO()
+	sonr := NewGORMRepository(gdb)
+	son := ServiceOfferingNode{SourceID: sourceID, TenantID: tenantID}
+	attrs := map[string]interface{}{
+		"modified":              "2020-01-08T10:22:59.423585Z",
+		"created":               "2020-01-08T10:22:59.423585Z",
+		"id":                    json.Number("4"),
+		"name":                  "demo",
+		"type":                  objectType,
+		"workflow_job_template": json.Number("12"),
+		"unified_job_template":  json.Number("10"),
+		"unified_job_type":      nil,
+	}
+	err := sonr.CreateOrUpdate(ctx, testhelper.TestLogger(), &son, attrs)
+	checkErrors(t, err, mock, sonr, "Expecting ignore object", "Ignoring non job template or workflow job template nodes")
+}
+
 func TestCreateErrorLocatingRecord(t *testing.T) {
 	gdb, mock, teardown := testhelper.MockDBSetup(t)
 	defer teardown()

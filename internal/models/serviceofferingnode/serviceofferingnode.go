@@ -144,7 +144,7 @@ func (son *ServiceOfferingNode) validateAttributes(attrs map[string]interface{})
 		}
 	}
 
-	objType := attrs["unified_job_type"].(string)
+	objType := base.ToSafeString(attrs["unified_job_type"])
 	if objType != "job" && objType != "workflow_job" {
 		return ErrIgnoreTowerObject
 	}
