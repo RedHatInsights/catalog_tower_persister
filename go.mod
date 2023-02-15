@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go v1.36.25
 	github.com/confluentinc/confluent-kafka-go v1.5.2 // indirect
 	github.com/google/uuid v1.1.2
-	github.com/prometheus/client_golang v0.9.3
+	github.com/prometheus/client_golang v1.11.1
 	github.com/redhatinsights/app-common-go v1.3.0
 	github.com/redhatinsights/platform-go-middlewares v0.7.0
 	github.com/sirupsen/logrus v1.7.0
